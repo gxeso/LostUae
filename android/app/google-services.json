@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "4991329968",
+    "project_id": "lostuae-d9386",
+    "storage_bucket": "lostuae-d9386.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:4991329968:android:d6af18e851035883ccbd75",
+        "android_client_info": {
+          "package_name": "com.example.lost_uae"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAUX_TOuKdTYGWY1r_KkqpvqMalO8l8K4c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
