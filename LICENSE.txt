@@ -1,0 +1,19 @@
+Copyright © 2026 [PROJECT NAME]
+
+This project is a joint work and is jointly owned by:
+
+- Adam Shamekh (8452337)
+- Mohamad Daya (7738882)
+- Noura Hassan (8877725)
+- Ghassan Madi (8303769)
+- Yazan Altinawi (8976661)
+- Mohammed Qudaih (7736356)
+
+All rights reserved.
+
+Unauthorized copying, modification, distribution, publication,
+or commercial use of this project, in whole or in part,
+is strictly prohibited without prior written permission
+from ALL copyright holders.
+
+This project was developed as an academic capstone project.
