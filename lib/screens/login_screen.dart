@@ -1,3 +1,9 @@
+// © 2026 Project LostUAE
+// Joint work – All rights reserved
+// Unauthorized use prohibited
+
+
+
 import 'package:flutter/material.dart';
 import 'package:lost_uae/screens/home_screen.dart';
 import 'sign_up_screen.dart';
@@ -110,14 +116,19 @@ class _LoginScreenState extends State<LoginScreen> {
   elevation: 0,
   title: const Text('LostUAE'),
   actions: [
-    IconButton(
-      onPressed: widget.toggleTheme,
-      icon: Icon(
-        widget.isDarkMode ? Icons.wb_sunny : Icons.dark_mode,
-        color: widget.isDarkMode ? Colors.yellow : Colors.white,
-      ),
+  IconButton(
+    onPressed: widget.toggleTheme,
+    icon: Icon(
+      Theme.of(context).brightness == Brightness.dark
+          ? Icons.wb_sunny
+          : Icons.dark_mode,
+      color: Theme.of(context).brightness == Brightness.dark
+          ? Colors.yellow
+          : Colors.white,
     ),
-  ],
+  ),
+],
+
 ),
 
       body: SafeArea(
@@ -197,8 +208,7 @@ class _LoginScreenState extends State<LoginScreen> {
   context,
   MaterialPageRoute(
     builder: (context) => ForgetPassScreen(
-      toggleTheme: widget.toggleTheme,
-      isDarkMode: widget.isDarkMode,
+      
     ),
   ),
 );

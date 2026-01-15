@@ -1,6 +1,13 @@
+// © 2026 Project LostUAE
+// Joint work – All rights reserved
+// Unauthorized use prohibited
+
+
 import 'package:flutter/material.dart';
 import 'utils/validators.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 
 
 
@@ -101,13 +108,31 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   try {
-    // 7️⃣ Firebase create account
-    await FirebaseAuth.instance.createUserWithEmailAndPassword(
+    // 7️⃣ CREATE AUTH USER
+    final credential =
+        await FirebaseAuth.instance.createUserWithEmailAndPassword(
       email: email,
       password: password,
     );
 
-    // 8️⃣ Success
+    final user = credential.user!;
+    final uid = user.uid;
+
+    // 8️⃣ STORE USER PROFILE IN FIRESTORE 🔥
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .set({
+      'uid': uid,
+      'email': email,
+      'nickname': nickname,
+      'phone': phone,
+      'role': 'user',
+      'isActive': true,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    // 9️⃣ SUCCESS
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         backgroundColor: Colors.green,
@@ -139,20 +164,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
 
 
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
   title: const Text('Create Account'),
-  actions: [
-    IconButton(
-      onPressed: widget.toggleTheme,
-      icon: Icon(
-        widget.isDarkMode ? Icons.wb_sunny : Icons.dark_mode,
-        color: widget.isDarkMode ? Colors.yellow : Colors.white,
-      ),
-    ),
-  ],
+  
 ),
 
       body: SafeArea(

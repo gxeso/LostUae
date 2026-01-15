@@ -1,7 +1,14 @@
+// © 2026 Project LostUAE
+// Joint work – All rights reserved
+// Unauthorized use prohibited
+
+
+
 import 'package:flutter/material.dart';
 import 'feed_screen.dart';
 import 'post_item_screen.dart';
 import 'profile_screen.dart';
+import '../CustomWidgets/notification_bell.dart';
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback toggleTheme;
@@ -28,40 +35,52 @@ class _HomeScreenState extends State<HomeScreen> {
 
     _pages = [
       const FeedScreen(),
-
       PostItemScreen(
         onPostSuccess: () {
-          setState(() {
-            _currentIndex = 0; // 🔥 GO BACK TO FEED
-          });
+          setState(() => _currentIndex = 0);
         },
       ),
-
       ProfileScreen(
         toggleTheme: widget.toggleTheme,
         isDarkMode: widget.isDarkMode,
         onCreatePost: () {
-          setState(() {
-            _currentIndex = 1; // 🔥 SWITCH TO POST TAB
-          });
+          setState(() => _currentIndex = 1);
         },
       ),
     ];
   }
 
   AppBar _buildAppBar() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // 📰 Feed
+    if (_currentIndex == 0) {
+      return AppBar(
+        title: const Text('LostUAE'),
+        actions: const [
+          NotificationBell(),
+        ],
+      );
+    }
+
+    // ➕ Post
+    if (_currentIndex == 1) {
+      return  AppBar(
+        title: Text('Post Lost / Found Item'),
+        automaticallyImplyLeading: false,
+      );
+    }
+
+    // 👤 Profile
     return AppBar(
-      title: Text(
-        _currentIndex == 1 ? 'Post Lost / Found Item' : 'LostUAE',
-      ),
-      automaticallyImplyLeading: false,
+      title: const Text('Profile'),
       actions: [
         IconButton(
-          icon: Icon(
-            widget.isDarkMode ? Icons.wb_sunny : Icons.dark_mode,
-            color: widget.isDarkMode ? Colors.yellow : Colors.white,
-          ),
           onPressed: widget.toggleTheme,
+          icon: Icon(
+            isDark ? Icons.wb_sunny : Icons.dark_mode,
+            color: isDark ? Colors.yellow : Colors.white,
+          ),
         ),
       ],
     );
@@ -72,13 +91,12 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: _buildAppBar(),
       body: _pages[_currentIndex],
-
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: (i) => setState(() => _currentIndex = i),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Feed'),
-          BottomNavigationBarItem(icon: Icon(Icons.add_circle_outline), label: 'Post'),
+          BottomNavigationBarItem(icon: Icon(Icons.add), label: 'Post'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),

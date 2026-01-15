@@ -1,16 +1,18 @@
+// © 2026 Project LostUAE
+// Joint work – All rights reserved
+// Unauthorized use prohibited
+
+
 import 'package:flutter/material.dart';
 import 'utils/validators.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 
 class ForgetPassScreen extends StatefulWidget {
-  final VoidCallback toggleTheme;
-  final bool isDarkMode;
+  
 
   const ForgetPassScreen({
-    super.key,
-    required this.toggleTheme,
-    required this.isDarkMode,
+    super.key
   });
 
   @override
@@ -81,15 +83,7 @@ class _ForgetPassScreenState extends State<ForgetPassScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Recover Password'),
-        actions: [
-          IconButton(
-            onPressed: widget.toggleTheme,
-            icon: Icon(
-              widget.isDarkMode ? Icons.wb_sunny : Icons.dark_mode,
-              color: widget.isDarkMode ? Colors.yellow : Colors.white,
-            ),
-          ),
-        ],
+        
       ),
       body: SafeArea(
         child: SingleChildScrollView(

@@ -1,3 +1,9 @@
+// © 2026 Project Name
+// Joint work – All rights reserved
+// Unauthorized use prohibited
+
+
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'login_screen.dart';
@@ -22,7 +28,7 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
 
-    Future.delayed(const Duration(seconds: 2), () {
+    Future.delayed(const Duration(seconds: 4), () {
       final user = FirebaseAuth.instance.currentUser;
 
       if (user != null) {

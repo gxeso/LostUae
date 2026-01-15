@@ -1,115 +1,264 @@
+// © 2026 Project LostUAE
+// Joint work – All rights reserved
+// Unauthorized use prohibited
+
+
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'item_details_screen.dart';
 
-class FeedScreen extends StatelessWidget {
+class FeedScreen extends StatefulWidget {
   const FeedScreen({super.key});
 
   @override
+  State<FeedScreen> createState() => _FeedScreenState();
+}
+
+class _FeedScreenState extends State<FeedScreen> {
+  String? selectedStatus;
+  String? selectedEmirate;
+  String searchText = '';
+
+  final TextEditingController searchController = TextEditingController();
+
+  final List<String> emirates = const [
+    'Dubai',
+    'Abu Dhabi',
+    'Sharjah',
+    'Ajman',
+    'Umm Al Quwain',
+    'Ras Al Khaimah',
+    'Fujairah',
+  ];
+
+  Query _buildQuery() {
+    Query query = FirebaseFirestore.instance.collection('items');
+
+    if (selectedStatus != null) {
+      query = query.where('status', isEqualTo: selectedStatus);
+    }
+
+    if (selectedEmirate != null) {
+      query = query.where('emirate', isEqualTo: selectedEmirate);
+    }
+
+    return query.orderBy('createdAt', descending: true);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('items')
-          .orderBy('createdAt', descending: true)
-          .snapshots(),
-
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Center(
-            child: Text('No lost or found items yet'),
-          );
-        }
-
-        final docs = snapshot.data!.docs;
-
-        return ListView.builder(
+    return Column(
+      children: [
+        // SEARCH BAR
+        Padding(
           padding: const EdgeInsets.all(16),
-          itemCount: docs.length,
-          itemBuilder: (context, index) {
-            final data = docs[index].data() as Map<String, dynamic>;
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: searchController,
+                  onChanged: (value) {
+                    setState(() {
+                      searchText = value.toLowerCase();
+                    });
+                  },
+                  decoration: const InputDecoration(
+                    hintText: 'Search items',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              IconButton(
+                icon: const Icon(Icons.filter_list),
+                onPressed: _openFilterSheet,
+              ),
+            ],
+          ),
+        ),
 
-            return FeedItemCard(
-              status: data['status'],
-              itemName: data['itemName'],
-              location: data['location'],
-              description: data['description'],
-              time: _formatTime(data['createdAt']),
-              imageUrl: data['imageUrl'],
+        // FEED
+        Expanded(
+          child: StreamBuilder<QuerySnapshot>(
+            stream: _buildQuery().snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final docs = snapshot.data!.docs.where((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                final name =
+                    (data['itemName'] ?? '').toString().toLowerCase();
+                return name.contains(searchText);
+              }).toList();
+
+              if (docs.isEmpty) {
+                return const Center(
+                  child: Text('No matching items found'),
+                );
+              }
+
+              return ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: docs.length,
+                itemBuilder: (context, index) {
+                  final data =
+                      docs[index].data() as Map<String, dynamic>;
+
+                  return FeedItemCard(
+                    itemId: docs[index].id,
+                    status: data['status'],
+                    itemName: data['itemName'],
+                    location: data['location'],
+                    emirate: data['emirate'],
+                    time: _formatTime(data['createdAt']),
+                    imageUrl: data['imageUrl'],
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatTime(Timestamp? timestamp) {
+    if (timestamp == null) return 'Just now';
+    final diff = DateTime.now().difference(timestamp.toDate());
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+    if (diff.inHours < 24) return '${diff.inHours} hours ago';
+    return '${diff.inDays} days ago';
+  }
+
+  void _openFilterSheet() {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Filters',
+                    style:
+                        TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  const Text('Status'),
+                  Wrap(
+                    spacing: 8,
+                    children: ['Lost', 'Found'].map((status) {
+                      return ChoiceChip(
+                        label: Text(status),
+                        selected: selectedStatus == status,
+                        onSelected: (selected) {
+                          setModalState(() {
+                            selectedStatus = selected ? status : null;
+                          });
+                          setState(() {});
+                        },
+                      );
+                    }).toList(),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  const Text('Emirate'),
+                  Wrap(
+                    spacing: 8,
+                    children: emirates.map((emirate) {
+                      return ChoiceChip(
+                        label: Text(emirate),
+                        selected: selectedEmirate == emirate,
+                        onSelected: (selected) {
+                          setModalState(() {
+                            selectedEmirate = selected ? emirate : null;
+                          });
+                          setState(() {});
+                        },
+                      );
+                    }).toList(),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () {
+                        setModalState(() {
+                          selectedStatus = null;
+                          selectedEmirate = null;
+                        });
+                        setState(() {});
+                      },
+                      child: const Text('Clear Filters'),
+                    ),
+                  ),
+                ],
+              ),
             );
           },
         );
       },
     );
   }
-
-  String _formatTime(Timestamp? timestamp) {
-    if (timestamp == null) return 'Just now';
-
-    final date = timestamp.toDate();
-    final diff = DateTime.now().difference(date);
-
-    if (diff.inMinutes < 60) {
-      return '${diff.inMinutes} min ago';
-    } else if (diff.inHours < 24) {
-      return '${diff.inHours} hours ago';
-    } else {
-      return '${diff.inDays} days ago';
-    }
-  }
 }
 
+/* -------------------------------------------------------------------------- */
+/*                               FEED CARD                                    */
+/* -------------------------------------------------------------------------- */
+
 class FeedItemCard extends StatelessWidget {
+  final String itemId;
   final String status;
   final String itemName;
   final String location;
+  final String emirate;
   final String time;
-  final String description;
   final String? imageUrl;
 
   const FeedItemCard({
     super.key,
+    required this.itemId,
     required this.status,
     required this.itemName,
     required this.location,
+    required this.emirate,
     required this.time,
-    required this.description,
     this.imageUrl,
   });
 
   @override
   Widget build(BuildContext context) {
-    final bool isLost = status == 'Lost';
+    final isLost = status == 'Lost';
 
     return InkWell(
-      borderRadius: BorderRadius.circular(12),
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => ItemDetailsScreen(
-              status: status,
-              itemName: itemName,
-              location: location,
-              time: time,
-              description: description,
-              imageUrl: imageUrl,
-            ),
+            builder: (_) => ItemDetailsScreen(itemId: itemId),
           ),
         );
       },
       child: Card(
         margin: const EdgeInsets.only(bottom: 16),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 🖼 IMAGE (OPTIONAL)
             if (imageUrl != null && imageUrl!.isNotEmpty)
               ClipRRect(
                 borderRadius:
@@ -129,7 +278,7 @@ class FeedItemCard extends StatelessWidget {
                 children: [
                   Chip(
                     label: Text(
-                      status,
+                      '$status • $emirate',
                       style: const TextStyle(color: Colors.white),
                     ),
                     backgroundColor: isLost ? Colors.red : Colors.green,
@@ -149,7 +298,8 @@ class FeedItemCard extends StatelessWidget {
 
                   Row(
                     children: [
-                      const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                      const Icon(Icons.location_on,
+                          size: 16, color: Colors.grey),
                       const SizedBox(width: 4),
                       Text(location),
                     ],
@@ -159,7 +309,8 @@ class FeedItemCard extends StatelessWidget {
 
                   Row(
                     children: [
-                      const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                      const Icon(Icons.access_time,
+                          size: 16, color: Colors.grey),
                       const SizedBox(width: 4),
                       Text(time),
                     ],
