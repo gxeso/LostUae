@@ -169,10 +169,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-  title: const Text('Create Account'),
-  
-),
-
+        title: const Text('Create Account'),
+        iconTheme: IconThemeData(color: Colors.white),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -234,8 +233,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 controller: phoneController,
                 keyboardType: TextInputType.phone,
                 decoration: InputDecoration(
-                  hintText: '+971 5X XXX XXXX',
-                  helperText: "UAE numbers only (starts with +971 or 05).",
+                  hintText: '05X XXX XXXX',
+                  helperText: "UAE numbers only (starts with 05).",
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),

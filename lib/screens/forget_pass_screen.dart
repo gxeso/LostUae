@@ -83,6 +83,7 @@ class _ForgetPassScreenState extends State<ForgetPassScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Recover Password'),
+        iconTheme: IconThemeData(color: Colors.white),
         
       ),
       body: SafeArea(

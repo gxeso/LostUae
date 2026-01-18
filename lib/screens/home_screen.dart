@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'feed_screen.dart';
 import 'post_item_screen.dart';
 import 'profile_screen.dart';
+import 'setting_screen.dart';
 import '../CustomWidgets/notification_bell.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -56,6 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // 📰 Feed
     if (_currentIndex == 0) {
       return AppBar(
+        automaticallyImplyActions: false,
         title: const Text('LostUAE'),
         actions: const [
           NotificationBell(),
@@ -72,18 +74,36 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     // 👤 Profile
-    return AppBar(
-      title: const Text('Profile'),
-      actions: [
-        IconButton(
-          onPressed: widget.toggleTheme,
-          icon: Icon(
-            isDark ? Icons.wb_sunny : Icons.dark_mode,
-            color: isDark ? Colors.yellow : Colors.white,
+    // 👤 Profile
+return AppBar(
+  automaticallyImplyActions: false,
+  title: const Text('Profile'),
+  iconTheme: const IconThemeData(color: Colors.white), // ⬅ back arrow white
+  actions: [
+    // 🌙 Dark mode
+    IconButton(
+      onPressed: widget.toggleTheme,
+      icon: Icon(
+        isDark ? Icons.wb_sunny : Icons.dark_mode,
+        color: isDark ? Colors.yellow : Colors.white,
+      ),
+    ),
+
+    // ⚙️ Settings
+    IconButton(
+      icon: const Icon(Icons.settings, color: Colors.white),
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const SettingsScreen(),
           ),
-        ),
-      ],
-    );
+        );
+      },
+    ),
+  ],
+);
+
   }
 
   @override

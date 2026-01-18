@@ -52,7 +52,8 @@ class ItemDetailsScreen extends StatelessWidget {
         final isLost = status == 'Lost';
 
         return Scaffold(
-          appBar: AppBar(title: const Text('Item Details')),
+          appBar: AppBar(title: const Text('Item Details'),
+          iconTheme: IconThemeData(color: Colors.white),),
           body: ListView(
             padding: const EdgeInsets.all(24),
             children: [

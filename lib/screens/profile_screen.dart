@@ -2,10 +2,10 @@
 // Joint work – All rights reserved
 // Unauthorized use prohibited
 
-
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'my_posts_screen.dart';
 import 'login_screen.dart';
 
@@ -137,10 +137,14 @@ class ProfileScreen extends StatelessWidget {
           Text(title,
               style: const TextStyle(fontSize: 14, color: Colors.grey)),
           const SizedBox(height: 4),
-          Text(value,
-              textAlign: TextAlign.center,
-              style:
-                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          Text(
+            value,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );
