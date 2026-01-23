@@ -2,8 +2,6 @@
 // Joint work – All rights reserved
 // Unauthorized use prohibited
 
-
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'item_details_screen.dart';
@@ -50,7 +48,7 @@ class _FeedScreenState extends State<FeedScreen> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // SEARCH BAR
+        // 🔍 SEARCH BAR
         Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -79,7 +77,7 @@ class _FeedScreenState extends State<FeedScreen> {
           ),
         ),
 
-        // FEED
+        // 📰 FEED
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
             stream: _buildQuery().snapshots(),
@@ -108,15 +106,17 @@ class _FeedScreenState extends State<FeedScreen> {
                   final data =
                       docs[index].data() as Map<String, dynamic>;
 
-                  return FeedItemCard(
-                    itemId: docs[index].id,
-                    status: data['status'],
-                    itemName: data['itemName'],
-                    location: data['location'],
-                    emirate: data['emirate'],
-                    time: _formatTime(data['createdAt']),
-                    imageUrl: data['imageUrl'],
-                  );
+                 return FeedItemCard(
+  itemId: docs[index].id,
+  status: data['status'],
+  isClaimed: data['isClaimed'] == true,
+  itemName: data['itemName'],
+  location: data['locationName'] ?? data['location'] ?? '',
+  emirate: data['emirate'],
+  time: _formatTime(data['createdAt']),
+  imageUrl: data['imageUrl'],
+);
+
                 },
               );
             },
@@ -151,7 +151,6 @@ class _FeedScreenState extends State<FeedScreen> {
                     style:
                         TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
-
                   const SizedBox(height: 16),
 
                   const Text('Status'),
@@ -222,6 +221,7 @@ class _FeedScreenState extends State<FeedScreen> {
 class FeedItemCard extends StatelessWidget {
   final String itemId;
   final String status;
+  final bool isClaimed;
   final String itemName;
   final String location;
   final String emirate;
@@ -232,6 +232,7 @@ class FeedItemCard extends StatelessWidget {
     super.key,
     required this.itemId,
     required this.status,
+    required this.isClaimed,
     required this.itemName,
     required this.location,
     required this.emirate,
@@ -241,8 +242,6 @@ class FeedItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isLost = status == 'Lost';
-
     return InkWell(
       onTap: () {
         Navigator.push(
@@ -278,10 +277,15 @@ class FeedItemCard extends StatelessWidget {
                 children: [
                   Chip(
                     label: Text(
-                      '$status • $emirate',
+                      isClaimed
+                          ? 'CLAIMED • $emirate'
+                          : '$status • $emirate',
                       style: const TextStyle(color: Colors.white),
                     ),
-                    backgroundColor: isLost ? Colors.red : Colors.green,
+                    backgroundColor:
+                        isClaimed ? Colors.grey : status == 'Lost'
+                            ? Colors.red
+                            : Colors.green,
                   ),
 
                   const SizedBox(height: 8),
@@ -301,7 +305,13 @@ class FeedItemCard extends StatelessWidget {
                       const Icon(Icons.location_on,
                           size: 16, color: Colors.grey),
                       const SizedBox(width: 4),
-                      Text(location),
+                      Expanded(
+                        child: Text(
+                          location,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
 

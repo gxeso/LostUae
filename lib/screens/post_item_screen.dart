@@ -2,7 +2,6 @@
 // Joint work – All rights reserved
 // Unauthorized use prohibited
 
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -37,9 +36,9 @@ class _PostItemScreenState extends State<PostItemScreen> {
   double? latitude;
   double? longitude;
   String? pickedAddress;
+  String? selectedEmirate;
 
   String status = 'Lost';
-  String? selectedEmirate;
   bool isLoading = false;
 
   final List<String> emirates = const [
@@ -61,7 +60,8 @@ class _PostItemScreenState extends State<PostItemScreen> {
     super.dispose();
   }
 
-  // 📸 Pick image
+  /* ---------------- IMAGE PICK ---------------- */
+
   Future<void> _pickImage() async {
     final picked = await _picker.pickImage(
       source: ImageSource.gallery,
@@ -73,7 +73,8 @@ class _PostItemScreenState extends State<PostItemScreen> {
     }
   }
 
-  // ☁️ Upload image (optional)
+  /* ---------------- IMAGE UPLOAD ---------------- */
+
   Future<String?> _uploadImage(String uid) async {
     if (selectedImage == null) return null;
 
@@ -81,21 +82,36 @@ class _PostItemScreenState extends State<PostItemScreen> {
         .ref()
         .child('items/$uid/${DateTime.now().millisecondsSinceEpoch}.jpg');
 
-    await ref.putFile(selectedImage!).timeout(
-      const Duration(seconds: 20),
+    await ref.putFile(
+      selectedImage!,
+      SettableMetadata(contentType: 'image/jpeg'),
     );
 
     return await ref.getDownloadURL();
   }
 
-  // 🚀 Submit item (FIXED)
+  /* ---------------- SUBMIT ITEM ---------------- */
+
   Future<void> _submitItem() async {
     if (isLoading) return;
     if (!_formKey.currentState!.validate()) return;
 
     if (pickedAddress == null || latitude == null || longitude == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a location on the map')),
+        const SnackBar(
+          content: Text('Please select a location on the map'),
+        ),
+      );
+      return;
+    }
+
+    if (selectedEmirate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Unable to detect emirate. Please choose a valid UAE location.',
+          ),
+        ),
       );
       return;
     }
@@ -105,34 +121,60 @@ class _PostItemScreenState extends State<PostItemScreen> {
 
     setState(() => isLoading = true);
 
-    final imageUrl = await _uploadImage(user.uid);
+    try {
+      final imageUrl = await _uploadImage(user.uid);
 
-    await FirebaseFirestore.instance.collection('items').add({
-      'status': status,
-      'itemName': itemNameController.text.trim(),
-      'description': descriptionController.text.trim(),
-      'location': locationController.text.trim(),
-      'locationName': pickedAddress,
-      'latitude': latitude,
-      'longitude': longitude,
-      'contactPhone': phoneController.text.trim(),
-      'emirate': selectedEmirate,
-      'userId': user.uid,
-      'imageUrl': imageUrl,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+      await FirebaseFirestore.instance.collection('items').add({
+        'status': status,
+        'itemName': itemNameController.text.trim(),
+        'description': descriptionController.text.trim(),
+        'location': locationController.text.trim(),
+        'locationName': pickedAddress,
+        'latitude': latitude,
+        'longitude': longitude,
+        'contactPhone': phoneController.text.trim(),
+        'emirate': selectedEmirate,
+        'userId': user.uid,
+        'imageUrl': imageUrl,
+        'createdAt': Timestamp.now(),
+        'isClaimed': false,
+        'claimedAt': null,
+      });
 
-    setState(() => isLoading = false);
+      setState(() => isLoading = false);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        backgroundColor: Colors.green,
-        content: Text('Item posted successfully'),
-      ),
-    );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.green,
+          content: Text('Item posted successfully'),
+        ),
+      );
 
-    widget.onPostSuccess();
+      widget.onPostSuccess();
+    } on FirebaseException catch (e) {
+      setState(() => isLoading = false);
+
+      if (e.code == 'permission-denied') {
+        const waitMinutes = 10;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Posting limit reached. Please wait $waitMinutes minutes before posting again.',
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to post item. Please try again.'),
+          ),
+        );
+      }
+    }
   }
+
+  /* ---------------- UI ---------------- */
 
   @override
   Widget build(BuildContext context) {
@@ -157,7 +199,9 @@ class _PostItemScreenState extends State<PostItemScreen> {
                       : null,
                 ),
                 child: selectedImage == null
-                    ? const Center(child: Icon(Icons.add_a_photo, size: 42))
+                    ? const Center(
+                        child: Icon(Icons.add_a_photo, size: 42),
+                      )
                     : null,
               ),
             ),
@@ -172,19 +216,6 @@ class _PostItemScreenState extends State<PostItemScreen> {
                 DropdownMenuItem(value: 'Found', child: Text('Found')),
               ],
               onChanged: (v) => setState(() => status = v!),
-            ),
-
-            const SizedBox(height: 16),
-
-            DropdownButtonFormField<String>(
-              value: selectedEmirate,
-              decoration: const InputDecoration(labelText: 'Emirate'),
-              items: emirates
-                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                  .toList(),
-              onChanged: (v) => setState(() => selectedEmirate = v),
-              validator: (v) =>
-                  v == null ? 'Please select an emirate' : null,
             ),
 
             const SizedBox(height: 16),
@@ -205,7 +236,6 @@ class _PostItemScreenState extends State<PostItemScreen> {
 
             const SizedBox(height: 16),
 
-            // 📍 MAP PICKER
             ListTile(
               leading: const Icon(Icons.location_on_outlined),
               title: const Text('Pick exact location'),
@@ -213,6 +243,8 @@ class _PostItemScreenState extends State<PostItemScreen> {
                 locationController.text.isEmpty
                     ? 'Tap to choose on map'
                     : locationController.text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () async {
@@ -229,9 +261,28 @@ class _PostItemScreenState extends State<PostItemScreen> {
                     latitude = result['lat'];
                     longitude = result['lng'];
                     locationController.text = result['name'];
+
+                    if (result['emirate'] != null &&
+                        emirates.contains(result['emirate'])) {
+                      selectedEmirate = result['emirate'];
+                    }
                   });
                 }
               },
+            ),
+
+            const SizedBox(height: 12),
+
+            TextFormField(
+              readOnly: true,
+              decoration: const InputDecoration(
+                labelText: 'Detected Emirate',
+                prefixIcon: Icon(Icons.map),
+              ),
+              controller: TextEditingController(
+                text: selectedEmirate ??
+                    'Select location to detect emirate',
+              ),
             ),
 
             const SizedBox(height: 16),

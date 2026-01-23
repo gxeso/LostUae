@@ -38,7 +38,7 @@ class NotificationBell extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const NotificationsScreen(),
+                    builder: (_) =>  const NotificationScreen(),
                   ),
                 );
               },

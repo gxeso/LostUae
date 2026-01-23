@@ -2,8 +2,6 @@
 // Joint work – All rights reserved
 // Unauthorized use prohibited
 
-
-
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -23,11 +21,12 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
   LatLng _center = const LatLng(25.2048, 55.2708);
   LatLng? selectedLatLng;
+
   String locationName = 'Tap or search a place';
+  String? detectedEmirate;
 
   final Set<Marker> _markers = {};
   final TextEditingController _searchController = TextEditingController();
-
   List<dynamic> searchResults = [];
 
   // ================= SEARCH =================
@@ -68,7 +67,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
     final LatLng pos = LatLng(loc['lat'], loc['lng']);
 
-    _moveMarker(pos, name);
+    await _onMapTap(pos, customName: name);
     setState(() => searchResults.clear());
 
     _mapController?.animateCamera(
@@ -77,19 +76,24 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   }
 
   // ================= MAP TAP =================
-  Future<void> _onMapTap(LatLng pos) async {
+  Future<void> _onMapTap(
+    LatLng pos, {
+    String? customName,
+  }) async {
     _moveMarker(pos, 'Loading location...');
-    final name = await _resolveLocationName(pos.latitude, pos.longitude);
+
+    final resolved = await _resolveLocation(pos.latitude, pos.longitude);
 
     setState(() {
-      locationName = name;
+      locationName = customName ?? resolved['name'] ?? 'Unknown location';
+
+      detectedEmirate = resolved['emirate'];
     });
   }
 
   void _moveMarker(LatLng pos, String name) {
     setState(() {
       selectedLatLng = pos;
-      locationName = name;
       _markers.clear();
       _markers.add(
         Marker(
@@ -101,38 +105,53 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     });
   }
 
-  // ================= LOCATION NAME RESOLVER =================
-  Future<String> _resolveLocationName(double lat, double lng) async {
-    // 1️⃣ Try nearby POI
-    final poiUrl =
-        'https://maps.googleapis.com/maps/api/place/nearbysearch/json'
-        '?location=$lat,$lng'
-        '&radius=50'
-        '&type=point_of_interest'
-        '&key=$googleApiKey';
-
-    final poiRes = await http.get(Uri.parse(poiUrl));
-    final poiData = json.decode(poiRes.body);
-
-    if (poiData['results'] != null && poiData['results'].isNotEmpty) {
-      return poiData['results'][0]['name'];
-    }
-
-    // 2️⃣ Try address
+  // ================= LOCATION + EMIRATE RESOLVER =================
+  Future<Map<String, String?>> _resolveLocation(
+      double lat, double lng) async {
     final geoUrl =
         'https://maps.googleapis.com/maps/api/geocode/json'
         '?latlng=$lat,$lng'
         '&key=$googleApiKey';
 
-    final geoRes = await http.get(Uri.parse(geoUrl));
-    final geoData = json.decode(geoRes.body);
+    final res = await http.get(Uri.parse(geoUrl));
+    final data = json.decode(res.body);
 
-    if (geoData['results'] != null && geoData['results'].isNotEmpty) {
-      return geoData['results'][0]['formatted_address'];
+    if (data['results'] == null || data['results'].isEmpty) {
+      return {
+        'name': '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}',
+        'emirate': null,
+      };
     }
 
-    // 3️⃣ Fallback
-    return '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}';
+    final result = data['results'][0];
+    final components = result['address_components'] as List;
+
+    String? emirate;
+
+    for (final c in components) {
+      final types = List<String>.from(c['types']);
+      if (types.contains('administrative_area_level_1')) {
+        emirate = _normalizeEmirate(c['long_name']);
+        break;
+      }
+    }
+
+    return {
+      'name': result['formatted_address'],
+      'emirate': emirate,
+    };
+  }
+
+  // ================= EMIRATE NORMALIZER =================
+  String? _normalizeEmirate(String raw) {
+    if (raw.contains('Dubai')) return 'Dubai';
+    if (raw.contains('Abu Dhabi')) return 'Abu Dhabi';
+    if (raw.contains('Sharjah')) return 'Sharjah';
+    if (raw.contains('Ajman')) return 'Ajman';
+    if (raw.contains('Umm')) return 'Umm Al Quwain';
+    if (raw.contains('Ras')) return 'Ras Al Khaimah';
+    if (raw.contains('Fujairah')) return 'Fujairah';
+    return null;
   }
 
   // ================= UI =================
@@ -146,9 +165,11 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       body: Stack(
         children: [
           GoogleMap(
-            initialCameraPosition: CameraPosition(target: _center, zoom: 12),
+            initialCameraPosition:
+                CameraPosition(target: _center, zoom: 12),
             markers: _markers,
-            onTap: _onMapTap,
+            onTap: (pos) => _onMapTap(pos),
+
             myLocationEnabled: true,
             myLocationButtonEnabled: true,
             onMapCreated: (c) => _mapController = c,
@@ -176,7 +197,6 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                   ),
                 ),
 
-                // 🔽 SEARCH RESULTS
                 if (searchResults.isNotEmpty)
                   Container(
                     margin: const EdgeInsets.only(top: 6),
@@ -200,11 +220,11 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             ),
           ),
 
-          // ✅ CONFIRM BUTTON
+          // ✅ CONFIRM
           Positioned(
             left: 16,
             right: 16,
-            bottom: 64, // ABOVE ANDROID NAV
+            bottom: 64,
             child: ElevatedButton(
               onPressed: selectedLatLng == null
                   ? null
@@ -213,6 +233,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                         'name': locationName,
                         'lat': selectedLatLng!.latitude,
                         'lng': selectedLatLng!.longitude,
+                        'emirate': detectedEmirate,
                       });
                     },
               child: const Text('Confirm location'),

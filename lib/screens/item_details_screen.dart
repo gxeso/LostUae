@@ -2,27 +2,53 @@
 // Joint work – All rights reserved
 // Unauthorized use prohibited
 
-
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-class ItemDetailsScreen extends StatelessWidget {
+class ItemDetailsScreen extends StatefulWidget {
   final String itemId;
+  final bool autoScrollToSimilarity;
 
   const ItemDetailsScreen({
     super.key,
     required this.itemId,
+    this.autoScrollToSimilarity = false,
   });
 
   @override
+  State<ItemDetailsScreen> createState() => _ItemDetailsScreenState();
+}
+
+class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
+  final GlobalKey _similarityKey = GlobalKey();
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (widget.autoScrollToSimilarity) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = _similarityKey.currentContext;
+        if (context != null) {
+          Scrollable.ensureVisible(
+            context,
+            duration: const Duration(milliseconds: 600),
+            curve: Curves.easeInOut,
+          );
+        }
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    debugPrint('OPENED ITEM ID: $itemId');
+    final currentUser = FirebaseAuth.instance.currentUser;
 
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
           .collection('items')
-          .doc(itemId)
+          .doc(widget.itemId)
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
@@ -41,42 +67,65 @@ class ItemDetailsScreen extends StatelessWidget {
 
         final status = data['status'] ?? '';
         final name = data['itemName'] ?? '';
-        final location = data['location'] ?? '';
+        final location = data['locationName'] ?? data['location'] ?? '';
         final emirate = data['emirate'] ?? '';
         final description = data['description'] ?? '';
         final imageUrl = data['imageUrl'];
         final createdAt = data['createdAt'] as Timestamp?;
+        final isClaimed = data['isClaimed'] == true;
+        final ownerId = data['userId'];
 
-        final time = createdAt != null ? _formatTime(createdAt) : '';
+        final isOwner =
+            currentUser != null && currentUser.uid == ownerId;
 
-        final isLost = status == 'Lost';
+        final time =
+            createdAt != null ? _formatTime(createdAt) : '';
 
         return Scaffold(
-          appBar: AppBar(title: const Text('Item Details'),
-          iconTheme: IconThemeData(color: Colors.white),),
+          appBar: AppBar(
+            title: const Text('Item Details'),
+          ),
           body: ListView(
             padding: const EdgeInsets.all(24),
             children: [
+              // 🔴 STATUS CHIP
               Chip(
-                label: Text(status, style: const TextStyle(color: Colors.white)),
-                backgroundColor: isLost ? Colors.red : Colors.green,
+                label: Text(
+                  isClaimed ? 'CLAIMED' : status,
+                  style: const TextStyle(color: Colors.white),
+                ),
+                backgroundColor: isClaimed
+                    ? Colors.grey
+                    : status == 'Lost'
+                        ? Colors.red
+                        : Colors.green,
               ),
 
               const SizedBox(height: 16),
 
               Text(
                 name,
-                style:
-                    const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
 
               const SizedBox(height: 14),
 
+              // 📍 LOCATION
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Icon(Icons.place, size: 18, color: Colors.grey),
                   const SizedBox(width: 6),
-                  Text(location),
+                  Expanded(
+                    child: Text(
+                      location,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
 
@@ -106,7 +155,8 @@ class ItemDetailsScreen extends StatelessWidget {
 
               const Text(
                 'Description',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.bold),
               ),
 
               const SizedBox(height: 8),
@@ -126,9 +176,47 @@ class ItemDetailsScreen extends StatelessWidget {
                   ),
                 ),
 
+              const SizedBox(height: 24),
+
+              // ✅ MARK AS CLAIMED
+              if (isOwner && !isClaimed)
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    icon:
+                        const Icon(Icons.check_circle_outline),
+                    label: const Text('Mark as Claimed'),
+                    onPressed: () async {
+                      await FirebaseFirestore.instance
+                          .collection('items')
+                          .doc(widget.itemId)
+                          .update({
+                        'isClaimed': true,
+                        'claimedAt': Timestamp.now(),
+                      });
+
+                      ScaffoldMessenger.of(context)
+                          .showSnackBar(
+                        const SnackBar(
+                          content:
+                              Text('Item marked as claimed'),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
               const SizedBox(height: 32),
 
-              SimilarItemsSection(currentItemId: itemId),
+              // 🔗 SIMILAR ITEMS
+              if (!isClaimed)
+                Container(
+                  key: _similarityKey,
+                  child: SimilarItemsSection(
+                    currentItemId: widget.itemId,
+                  ),
+                ),
             ],
           ),
         );
@@ -144,49 +232,48 @@ class ItemDetailsScreen extends StatelessWidget {
   }
 }
 
-/* -------------------------------------------------------------------------- */
+/* ========================================================================== */
 /*                               SIMILAR ITEMS                                */
-/* -------------------------------------------------------------------------- */
+/* ========================================================================== */
 
 class SimilarItemsSection extends StatelessWidget {
   final String currentItemId;
 
-  const SimilarItemsSection({super.key, required this.currentItemId});
+  const SimilarItemsSection({
+    super.key,
+    required this.currentItemId,
+  });
 
   @override
   Widget build(BuildContext context) {
     final firestore = FirebaseFirestore.instance;
-
-    final sourceStream = firestore
-        .collection('matched')
-        .where('sourceId', isEqualTo: currentItemId)
-        .snapshots();
-
-    final targetStream = firestore
-        .collection('matched')
-        .where('targetId', isEqualTo: currentItemId)
-        .snapshots();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
           'Similar Items',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          style:
+              TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
 
         StreamBuilder<QuerySnapshot>(
-          stream: sourceStream,
+          stream: firestore
+              .collection('matched')
+              .where('sourceId',
+                  isEqualTo: currentItemId)
+              .snapshots(),
           builder: (context, sourceSnap) {
-            if (!sourceSnap.hasData) {
-              return const CircularProgressIndicator();
-            }
-
             return StreamBuilder<QuerySnapshot>(
-              stream: targetStream,
+              stream: firestore
+                  .collection('matched')
+                  .where('targetId',
+                      isEqualTo: currentItemId)
+                  .snapshots(),
               builder: (context, targetSnap) {
-                if (!targetSnap.hasData) {
+                if (!sourceSnap.hasData ||
+                    !targetSnap.hasData) {
                   return const CircularProgressIndicator();
                 }
 
@@ -194,9 +281,6 @@ class SimilarItemsSection extends StatelessWidget {
                   ...sourceSnap.data!.docs,
                   ...targetSnap.data!.docs,
                 ];
-
-                debugPrint(
-                    'SIMILAR MATCHES FOUND: ${allDocs.length}');
 
                 if (allDocs.isEmpty) {
                   return const Text(
@@ -207,7 +291,8 @@ class SimilarItemsSection extends StatelessWidget {
 
                 return Column(
                   children: allDocs.map((doc) {
-                    final data = doc.data() as Map<String, dynamic>;
+                    final data =
+                        doc.data() as Map<String, dynamic>;
 
                     final otherItemId =
                         data['sourceId'] == currentItemId
@@ -215,7 +300,8 @@ class SimilarItemsSection extends StatelessWidget {
                             : data['sourceId'];
 
                     final score =
-                        (data['score'] as num?)?.toDouble() ?? 0.0;
+                        (data['score'] as num?)?.toDouble() ??
+                            0.0;
 
                     return SimilarItemCard(
                       itemId: otherItemId,
@@ -232,9 +318,9 @@ class SimilarItemsSection extends StatelessWidget {
   }
 }
 
-/* -------------------------------------------------------------------------- */
+/* ========================================================================== */
 /*                            SIMILAR ITEM CARD                               */
-/* -------------------------------------------------------------------------- */
+/* ========================================================================== */
 
 class SimilarItemCard extends StatelessWidget {
   final String itemId;
@@ -254,17 +340,12 @@ class SimilarItemCard extends StatelessWidget {
           .doc(itemId)
           .snapshots(),
       builder: (context, snapshot) {
-        // 🔴 HARD GUARD
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox.shrink();
-        }
-
         if (!snapshot.hasData || !snapshot.data!.exists) {
-          debugPrint('⚠️ Missing item for similar match: $itemId');
           return const SizedBox.shrink();
         }
 
-        final data = snapshot.data!.data() as Map<String, dynamic>;
+        final data =
+            snapshot.data!.data() as Map<String, dynamic>;
         final name = data['itemName'] ?? 'Unnamed item';
 
         return Card(
@@ -276,7 +357,8 @@ class SimilarItemCard extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => ItemDetailsScreen(itemId: itemId),
+                  builder: (_) =>
+                      ItemDetailsScreen(itemId: itemId),
                 ),
               );
             },
@@ -287,15 +369,17 @@ class SimilarItemCard extends StatelessWidget {
   }
 }
 
-
-/* -------------------------------------------------------------------------- */
-/*                             BLUE SCORE CIRCLE                               */
-/* -------------------------------------------------------------------------- */
+/* ========================================================================== */
+/*                             SCORE CIRCLE                                   */
+/* ========================================================================== */
 
 class SimilarityCircle extends StatelessWidget {
   final double score;
 
-  const SimilarityCircle({super.key, required this.score});
+  const SimilarityCircle({
+    super.key,
+    required this.score,
+  });
 
   @override
   Widget build(BuildContext context) {

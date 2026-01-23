@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "lostuae-d9386"
-  }
+    "default": "lostuae-d9386",
+    "staging": "lostuae-d9386"
+  },
+  "targets": {},
+  "etags": {}
 }

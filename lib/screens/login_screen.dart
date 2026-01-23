@@ -1,15 +1,17 @@
- // © 2026 Project LostUAE
+// © 2026 Project LostUAE
 // Joint work – All rights reserved
 // Unauthorized use prohibited
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import 'home_screen.dart';
 import 'sign_up_screen.dart';
 import 'forget_pass_screen.dart';
 import 'terms_screen.dart';
+import 'complete_profile_screen.dart';
 import 'utils/validators.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -27,8 +29,10 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController emailController = TextEditingController();
-  final TextEditingController passwordController = TextEditingController();
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+
+  bool isLoading = false;
 
   @override
   void dispose() {
@@ -37,118 +41,197 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  /// 🔐 MAIN LOGIN HANDLER
-  Future<bool> _handleLogin() async {
+  /* ================= EMAIL LOGIN ================= */
+  Future<void> _handleEmailLogin() async {
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
 
-    // 1️⃣ EMPTY CHECK
     if (email.isEmpty || password.isEmpty) {
       _showError('Please enter email and password');
-      return false;
+      return;
     }
 
-    // 2️⃣ EMAIL FORMAT CHECK
     if (!Validators.emailRegExp.hasMatch(email)) {
       _showError('Invalid email format');
-      return false;
+      return;
     }
 
-    // 3️⃣ PASSWORD FORMAT CHECK
     if (!Validators.passwordRegExp.hasMatch(password)) {
-      _showError(
-        'Password must be at least 8 characters and contain letters and numbers',
-      );
-      return false;
+      _showError('Password must contain letters & numbers');
+      return;
     }
 
     try {
-      // 4️⃣ FIREBASE AUTH
-      final credential =
-          await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      setState(() => isLoading = true);
 
-      final user = credential.user;
+      final cred = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: password);
+
+      final user = cred.user;
       if (user == null) {
-        _showError('Login failed. Try again.');
-        return false;
+        _showError('Login failed');
+        return;
       }
 
-      // 5️⃣ TERMS & CONDITIONS CHECK (AFTER LOGIN)
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-
-      final hasAccepted =
-          userDoc.data()?['hasAcceptedTerms'] == true;
-
-      if (!hasAccepted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const TermsScreen(),
-          ),
-        );
-        return false; // ⛔ BLOCK HOME
-      }
-
-      // 6️⃣ SUCCESS
-      _showSuccess('Login successful');
-      return true;
+      await _checkTermsAndNavigate(user);
     } on FirebaseAuthException catch (e) {
-      String message = 'Login failed';
-
       if (e.code == 'user-not-found') {
-        message = 'No account found for this email';
+        _showError('No account found');
       } else if (e.code == 'wrong-password') {
-        message = 'Incorrect password';
-      } else if (e.code == 'invalid-email') {
-        message = 'Invalid email address';
+        _showError('Incorrect password');
+      } else {
+        _showError('Login failed');
       }
-
-      _showError(message);
-      return false;
+    } finally {
+      setState(() => isLoading = false);
     }
   }
 
-  /// ❌ ERROR SNACKBAR
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: Colors.red,
-        content: Text(
-          message,
-          style: const TextStyle(color: Colors.white),
+  /* ================= GOOGLE LOGIN ================= */
+  Future<void> _handleGoogleSignIn() async {
+    try {
+      setState(() => isLoading = true);
+
+      // 1️⃣ Google sign in
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) return;
+
+      final googleAuth = await googleUser.authentication;
+
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // 2️⃣ Firebase Auth
+      final userCredential =
+          await FirebaseAuth.instance.signInWithCredential(credential);
+
+      final user = userCredential.user;
+      if (user == null) return;
+
+      final userRef =
+          FirebaseFirestore.instance.collection('users').doc(user.uid);
+
+      // 3️⃣ Create Firestore doc if first time
+      final snap = await userRef.get();
+      if (!snap.exists) {
+        await userRef.set({
+          'uid': user.uid,
+          'email': user.email ?? '',
+          'createdAt': Timestamp.now(),
+          'postCount': 0,
+          'lastPostAt': Timestamp.fromMillisecondsSinceEpoch(0),
+          'hasAcceptedTerms': false,
+          'termsAcceptedAt': null,
+        });
+      }
+
+      final data = (await userRef.get()).data();
+
+      // 4️⃣ PROFILE COMPLETION CHECK
+      final nickname = data?['nickname'] as String?;
+final phone = data?['phone'] as String?;
+
+final needsProfile =
+    nickname == null ||
+    nickname.trim().isEmpty ||
+    phone == null ||
+    phone.trim().isEmpty;
+
+
+      if (needsProfile) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const CompleteProfileScreen(),
+          ),
+        );
+        return;
+      }
+
+      // 5️⃣ TERMS CHECK
+      final hasAcceptedTerms = data?['hasAcceptedTerms'] == true;
+      if (!hasAcceptedTerms) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const TermsScreen()),
+        );
+        return;
+      }
+
+      // 6️⃣ HOME
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) => HomeScreen(
+            toggleTheme: widget.toggleTheme,
+            isDarkMode: widget.isDarkMode,
+          ),
+        ),
+        (_) => false,
+      );
+    } catch (e) {
+      debugPrint('🔥 GOOGLE LOGIN ERROR: $e');
+      _showError('Google sign-in failed');
+    } finally {
+      setState(() => isLoading = false);
+    }
+  }
+
+  /* ================= TERMS CHECK ================= */
+  Future<void> _checkTermsAndNavigate(User user) async {
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    final hasAccepted = doc.data()?['hasAcceptedTerms'] == true;
+
+    if (!hasAccepted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const TermsScreen()),
+      );
+      return;
+    }
+
+    _showSuccess('Login successful');
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => HomeScreen(
+          toggleTheme: widget.toggleTheme,
+          isDarkMode: widget.isDarkMode,
         ),
       ),
+      (_) => false,
     );
   }
 
-  /// ✅ SUCCESS SNACKBAR
-  void _showSuccess(String message) {
+  /* ================= UI HELPERS ================= */
+  void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: Colors.green,
-        content: Text(
-          message,
-          style: const TextStyle(color: Colors.white),
-        ),
-      ),
+      SnackBar(backgroundColor: Colors.red, content: Text(msg)),
     );
   }
 
+  void _showSuccess(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(backgroundColor: Colors.green, content: Text(msg)),
+    );
+  }
+
+  /* ================= UI ================= */
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
-        centerTitle: true,
-        elevation: 0,
         title: const Text('LostUAE'),
+        centerTitle: true,
         actions: [
           IconButton(
             onPressed: widget.toggleTheme,
@@ -159,134 +242,106 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ],
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 20),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 30),
+            const Text(
+              'Welcome Back',
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            const Text('Login to your account',
+                style: TextStyle(color: Colors.grey)),
 
-              const Text(
-                'Welcome Back',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+            const SizedBox(height: 40),
+
+            TextField(
+              controller: emailController,
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                border: OutlineInputBorder(),
               ),
-              const SizedBox(height: 15),
-              const Text(
-                'Login to your account',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+
+            const SizedBox(height: 20),
+
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Password',
+                border: OutlineInputBorder(),
               ),
+            ),
 
-              const SizedBox(height: 40),
+            const SizedBox(height: 12),
 
-              const Text('Email', style: TextStyle(fontWeight: FontWeight.w500)),
-              const SizedBox(height: 15),
-              TextField(
-                controller: emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(
-                  hintText: 'example@email.com',
-                  helperText: "We'll never share your email.",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ForgetPassScreen()),
                 ),
+                child: const Text('Forgot password?'),
               ),
+            ),
 
-              const SizedBox(height: 20),
+            const SizedBox(height: 20),
 
-              const Text('Password',
-                  style: TextStyle(fontWeight: FontWeight.w500)),
-              const SizedBox(height: 8),
-              TextField(
-                controller: passwordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  hintText: 'Enter your password',
-                  helperText:
-                      "At least 8 characters, with letters and numbers.",
-                  helperMaxLines: 2,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: isLoading ? null : _handleEmailLogin,
+                child: isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text('Login'),
               ),
+            ),
 
-              const SizedBox(height: 12),
+            const SizedBox(height: 20),
 
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ForgetPassScreen(),
-                      ),
-                    );
-                  },
-                  child: const Text(
-                    'Forgot password?',
-                    style: TextStyle(color: Colors.blue),
-                  ),
-                ),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.g_mobiledata, size: 28),
+                label: const Text('Continue with Google'),
+                onPressed: isLoading ? null : _handleGoogleSignIn,
               ),
+            ),
 
-              const SizedBox(height: 20),
+            const SizedBox(height: 24),
 
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    final success = await _handleLogin();
-                    if (!success) return;
-
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => HomeScreen(
-                          toggleTheme: widget.toggleTheme,
-                          isDarkMode: widget.isDarkMode,
-                        ),
-                      ),
-                      (route) => false,
-                    );
-                  },
-                  child: const Text('Login'),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text("Don't have an account? "),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => SignUpScreen(
-                            toggleTheme: widget.toggleTheme,
-                            isDarkMode: widget.isDarkMode,
-                          ),
-                        ),
-                      );
-                    },
-                    child: const Text(
-                      'Sign up',
-                      style: TextStyle(
-                        color: Colors.blue,
-                        fontWeight: FontWeight.bold,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text("Don't have an account? "),
+                GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => SignUpScreen(
+                        toggleTheme: widget.toggleTheme,
+                        isDarkMode: widget.isDarkMode,
                       ),
                     ),
                   ),
-                ],
-              ),
-            ],
-          ),
+                  child: const Text(
+                    'Sign up',
+                    style: TextStyle(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

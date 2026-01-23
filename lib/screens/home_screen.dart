@@ -2,13 +2,13 @@
 // Joint work – All rights reserved
 // Unauthorized use prohibited
 
-
-
 import 'package:flutter/material.dart';
+
 import 'feed_screen.dart';
 import 'post_item_screen.dart';
 import 'profile_screen.dart';
 import 'setting_screen.dart';
+
 import '../CustomWidgets/notification_bell.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -54,18 +54,17 @@ class _HomeScreenState extends State<HomeScreen> {
   AppBar _buildAppBar() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // 📰 Feed
+    // 📰 FEED
     if (_currentIndex == 0) {
-      return AppBar(
-        automaticallyImplyActions: false,
-        title: const Text('LostUAE'),
-        actions: const [
+      return  AppBar(
+        title: Text('LostUAE'),
+        actions: const[
           NotificationBell(),
         ],
       );
     }
 
-    // ➕ Post
+    // ➕ POST
     if (_currentIndex == 1) {
       return  AppBar(
         title: Text('Post Lost / Found Item'),
@@ -73,37 +72,34 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // 👤 Profile
-    // 👤 Profile
-return AppBar(
-  automaticallyImplyActions: false,
-  title: const Text('Profile'),
-  iconTheme: const IconThemeData(color: Colors.white), // ⬅ back arrow white
-  actions: [
-    // 🌙 Dark mode
-    IconButton(
-      onPressed: widget.toggleTheme,
-      icon: Icon(
-        isDark ? Icons.wb_sunny : Icons.dark_mode,
-        color: isDark ? Colors.yellow : Colors.white,
-      ),
-    ),
-
-    // ⚙️ Settings
-    IconButton(
-      icon: const Icon(Icons.settings, color: Colors.white),
-      onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const SettingsScreen(),
+    // 👤 PROFILE
+    return AppBar(
+      title: const Text('Profile'),
+      automaticallyImplyLeading: false,
+      actions: [
+        // 🌙 Dark / Light Mode
+        IconButton(
+          onPressed: widget.toggleTheme,
+          icon: Icon(
+            isDark ? Icons.wb_sunny : Icons.dark_mode,
+            color: isDark ? Colors.yellow : Colors.white,
           ),
-        );
-      },
-    ),
-  ],
-);
+        ),
 
+        // ⚙️ Settings
+        IconButton(
+          icon: const Icon(Icons.settings),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const SettingsScreen(),
+              ),
+            );
+          },
+        ),
+      ],
+    );
   }
 
   @override
@@ -113,11 +109,20 @@ return AppBar(
       body: _pages[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
+        onTap: (index) => setState(() => _currentIndex = index),
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Feed'),
-          BottomNavigationBarItem(icon: Icon(Icons.add), label: 'Post'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Feed',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.add),
+            label: 'Post',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'Profile',
+          ),
         ],
       ),
     );
