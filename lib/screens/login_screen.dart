@@ -13,6 +13,7 @@ import 'forget_pass_screen.dart';
 import 'terms_screen.dart';
 import 'complete_profile_screen.dart';
 import 'utils/validators.dart';
+import '../theme/app_colors.dart';
 
 class LoginScreen extends StatefulWidget {
   final VoidCallback toggleTheme;
@@ -92,7 +93,6 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       setState(() => isLoading = true);
 
-      // 1️⃣ Google sign in
       final googleUser = await GoogleSignIn().signIn();
       if (googleUser == null) return;
 
@@ -103,7 +103,6 @@ class _LoginScreenState extends State<LoginScreen> {
         idToken: googleAuth.idToken,
       );
 
-      // 2️⃣ Firebase Auth
       final userCredential =
           await FirebaseAuth.instance.signInWithCredential(credential);
 
@@ -113,7 +112,6 @@ class _LoginScreenState extends State<LoginScreen> {
       final userRef =
           FirebaseFirestore.instance.collection('users').doc(user.uid);
 
-      // 3️⃣ Create Firestore doc if first time
       final snap = await userRef.get();
       if (!snap.exists) {
         await userRef.set({
@@ -129,16 +127,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final data = (await userRef.get()).data();
 
-      // 4️⃣ PROFILE COMPLETION CHECK
       final nickname = data?['nickname'] as String?;
-final phone = data?['phone'] as String?;
+      final phone = data?['phone'] as String?;
 
-final needsProfile =
-    nickname == null ||
-    nickname.trim().isEmpty ||
-    phone == null ||
-    phone.trim().isEmpty;
-
+      final needsProfile =
+          nickname == null ||
+          nickname.trim().isEmpty ||
+          phone == null ||
+          phone.trim().isEmpty;
 
       if (needsProfile) {
         Navigator.pushReplacement(
@@ -150,7 +146,6 @@ final needsProfile =
         return;
       }
 
-      // 5️⃣ TERMS CHECK
       final hasAcceptedTerms = data?['hasAcceptedTerms'] == true;
       if (!hasAcceptedTerms) {
         Navigator.pushReplacement(
@@ -160,7 +155,6 @@ final needsProfile =
         return;
       }
 
-      // 6️⃣ HOME
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
@@ -213,13 +207,19 @@ final needsProfile =
   /* ================= UI HELPERS ================= */
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(backgroundColor: Colors.red, content: Text(msg)),
+      SnackBar(
+        backgroundColor: AppColors.error,
+        content: Text(msg),
+      ),
     );
   }
 
   void _showSuccess(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(backgroundColor: Colors.green, content: Text(msg)),
+      SnackBar(
+        backgroundColor: AppColors.success,
+        content: Text(msg),
+      ),
     );
   }
 
@@ -231,13 +231,12 @@ final needsProfile =
     return Scaffold(
       appBar: AppBar(
         title: const Text('LostUAE'),
-        centerTitle: true,
         actions: [
           IconButton(
             onPressed: widget.toggleTheme,
             icon: Icon(
               isDark ? Icons.wb_sunny : Icons.dark_mode,
-              color: isDark ? Colors.yellow : Colors.white,
+              color: Colors.white,
             ),
           ),
         ],
@@ -245,24 +244,32 @@ final needsProfile =
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const SizedBox(height: 30),
+            const SizedBox(height: 32),
+
             const Text(
               'Welcome Back',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            const SizedBox(height: 10),
-            const Text('Login to your account',
-                style: TextStyle(color: Colors.grey)),
+
+            const SizedBox(height: 8),
+
+            Text(
+              'Login to your account',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
 
             const SizedBox(height: 40),
 
             TextField(
               controller: emailController,
+              keyboardType: TextInputType.emailAddress,
               decoration: const InputDecoration(
                 labelText: 'Email',
-                border: OutlineInputBorder(),
               ),
             ),
 
@@ -273,7 +280,6 @@ final needsProfile =
               obscureText: true,
               decoration: const InputDecoration(
                 labelText: 'Password',
-                border: OutlineInputBorder(),
               ),
             ),
 
@@ -284,21 +290,29 @@ final needsProfile =
               child: TextButton(
                 onPressed: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const ForgetPassScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const ForgetPassScreen(),
+                  ),
                 ),
                 child: const Text('Forgot password?'),
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
 
             SizedBox(
-              width: double.infinity,
               height: 48,
               child: ElevatedButton(
                 onPressed: isLoading ? null : _handleEmailLogin,
                 child: isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
+                    ? const SizedBox(
+                        height: 22,
+                        width: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
                     : const Text('Login'),
               ),
             ),
@@ -306,7 +320,6 @@ final needsProfile =
             const SizedBox(height: 20),
 
             SizedBox(
-              width: double.infinity,
               height: 48,
               child: OutlinedButton.icon(
                 icon: const Icon(Icons.g_mobiledata, size: 28),
@@ -315,7 +328,7 @@ final needsProfile =
               ),
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
 
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -331,10 +344,10 @@ final needsProfile =
                       ),
                     ),
                   ),
-                  child: const Text(
+                  child: Text(
                     'Sign up',
                     style: TextStyle(
-                      color: Colors.blue,
+                      color: Theme.of(context).colorScheme.primary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),

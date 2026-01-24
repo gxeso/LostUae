@@ -2,12 +2,9 @@
 // Joint work – All rights reserved
 // Unauthorized use prohibited
 
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:http/http.dart' as http;
-
-const String googleApiKey = 'AIzaSyBOtWKSFWzkVaGOM0QfmG_fBneJIXCLyZA';
+import 'package:geocoding/geocoding.dart';
 
 class MapPickerScreen extends StatefulWidget {
   const MapPickerScreen({super.key});
@@ -17,226 +14,175 @@ class MapPickerScreen extends StatefulWidget {
 }
 
 class _MapPickerScreenState extends State<MapPickerScreen> {
+  final TextEditingController _searchController = TextEditingController();
   GoogleMapController? _mapController;
 
-  LatLng _center = const LatLng(25.2048, 55.2708);
   LatLng? selectedLatLng;
+  String? address;
+  String? emirate;
 
-  String locationName = 'Tap or search a place';
-  String? detectedEmirate;
+  final CameraPosition _initialPosition = const CameraPosition(
+    target: LatLng(25.2048, 55.2708), // Dubai
+    zoom: 11,
+  );
 
-  final Set<Marker> _markers = {};
-  final TextEditingController _searchController = TextEditingController();
-  List<dynamic> searchResults = [];
+  /* ================= SEARCH LOCATION ================= */
 
-  // ================= SEARCH =================
-  Future<void> _searchPlaces(String input) async {
-    if (input.isEmpty) {
-      setState(() => searchResults.clear());
-      return;
-    }
+  Future<void> _searchLocation(String query) async {
+    if (query.trim().isEmpty) return;
 
-    final url =
-        'https://maps.googleapis.com/maps/api/place/autocomplete/json'
-        '?input=$input'
-        '&location=25.2048,55.2708'
-        '&radius=50000'
-        '&key=$googleApiKey';
+    try {
+      final locations = await locationFromAddress(query);
 
-    final res = await http.get(Uri.parse(url));
-    final data = json.decode(res.body);
+      if (locations.isNotEmpty) {
+        final loc = locations.first;
+        final latLng = LatLng(loc.latitude, loc.longitude);
 
-    setState(() {
-      searchResults = data['predictions'] ?? [];
-    });
-  }
+        _mapController?.animateCamera(
+          CameraUpdate.newLatLngZoom(latLng, 14),
+        );
 
-  // ================= PLACE DETAILS =================
-  Future<void> _selectPlace(String placeId) async {
-    final url =
-        'https://maps.googleapis.com/maps/api/place/details/json'
-        '?place_id=$placeId'
-        '&fields=name,geometry'
-        '&key=$googleApiKey';
-
-    final res = await http.get(Uri.parse(url));
-    final data = json.decode(res.body);
-
-    final loc = data['result']['geometry']['location'];
-    final name = data['result']['name'];
-
-    final LatLng pos = LatLng(loc['lat'], loc['lng']);
-
-    await _onMapTap(pos, customName: name);
-    setState(() => searchResults.clear());
-
-    _mapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(pos, 16),
-    );
-  }
-
-  // ================= MAP TAP =================
-  Future<void> _onMapTap(
-    LatLng pos, {
-    String? customName,
-  }) async {
-    _moveMarker(pos, 'Loading location...');
-
-    final resolved = await _resolveLocation(pos.latitude, pos.longitude);
-
-    setState(() {
-      locationName = customName ?? resolved['name'] ?? 'Unknown location';
-
-      detectedEmirate = resolved['emirate'];
-    });
-  }
-
-  void _moveMarker(LatLng pos, String name) {
-    setState(() {
-      selectedLatLng = pos;
-      _markers.clear();
-      _markers.add(
-        Marker(
-          markerId: const MarkerId('selected'),
-          position: pos,
-          infoWindow: InfoWindow(title: name),
-        ),
-      );
-    });
-  }
-
-  // ================= LOCATION + EMIRATE RESOLVER =================
-  Future<Map<String, String?>> _resolveLocation(
-      double lat, double lng) async {
-    final geoUrl =
-        'https://maps.googleapis.com/maps/api/geocode/json'
-        '?latlng=$lat,$lng'
-        '&key=$googleApiKey';
-
-    final res = await http.get(Uri.parse(geoUrl));
-    final data = json.decode(res.body);
-
-    if (data['results'] == null || data['results'].isEmpty) {
-      return {
-        'name': '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}',
-        'emirate': null,
-      };
-    }
-
-    final result = data['results'][0];
-    final components = result['address_components'] as List;
-
-    String? emirate;
-
-    for (final c in components) {
-      final types = List<String>.from(c['types']);
-      if (types.contains('administrative_area_level_1')) {
-        emirate = _normalizeEmirate(c['long_name']);
-        break;
+        await _onTap(latLng);
       }
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Location not found')),
+      );
     }
+  }
 
-    return {
-      'name': result['formatted_address'],
+  /* ================= TAP ON MAP ================= */
+
+  Future<void> _onTap(LatLng position) async {
+    setState(() {
+      selectedLatLng = position;
+      address = null;
+      emirate = null;
+    });
+
+    try {
+      final placemarks =
+          await placemarkFromCoordinates(position.latitude, position.longitude);
+
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+
+        final admin = place.administrativeArea?.toLowerCase() ?? '';
+
+        String? detectedEmirate;
+        if (admin.contains('dubai')) detectedEmirate = 'Dubai';
+        else if (admin.contains('abu')) detectedEmirate = 'Abu Dhabi';
+        else if (admin.contains('sharjah')) detectedEmirate = 'Sharjah';
+        else if (admin.contains('ajman')) detectedEmirate = 'Ajman';
+        else if (admin.contains('umm')) detectedEmirate = 'Umm Al Quwain';
+        else if (admin.contains('ras')) detectedEmirate = 'Ras Al Khaimah';
+        else if (admin.contains('fujairah')) detectedEmirate = 'Fujairah';
+
+        setState(() {
+          address =
+              '${place.name ?? ''}, ${place.locality ?? place.subLocality ?? ''}'
+                  .trim();
+          emirate = detectedEmirate;
+        });
+      }
+    } catch (_) {}
+  }
+
+  /* ================= CONFIRM ================= */
+
+  void _confirm() {
+    if (selectedLatLng == null) return;
+
+    Navigator.pop(context, {
+      'name': address ?? 'Selected location',
+      'lat': selectedLatLng!.latitude,
+      'lng': selectedLatLng!.longitude,
       'emirate': emirate,
-    };
+    });
   }
 
-  // ================= EMIRATE NORMALIZER =================
-  String? _normalizeEmirate(String raw) {
-    if (raw.contains('Dubai')) return 'Dubai';
-    if (raw.contains('Abu Dhabi')) return 'Abu Dhabi';
-    if (raw.contains('Sharjah')) return 'Sharjah';
-    if (raw.contains('Ajman')) return 'Ajman';
-    if (raw.contains('Umm')) return 'Umm Al Quwain';
-    if (raw.contains('Ras')) return 'Ras Al Khaimah';
-    if (raw.contains('Fujairah')) return 'Fujairah';
-    return null;
-  }
+  /* ================= UI ================= */
 
-  // ================= UI =================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pick Location'),
-        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Stack(
         children: [
           GoogleMap(
-            initialCameraPosition:
-                CameraPosition(target: _center, zoom: 12),
-            markers: _markers,
-            onTap: (pos) => _onMapTap(pos),
-
+            initialCameraPosition: _initialPosition,
+            onMapCreated: (controller) => _mapController = controller,
+            onTap: _onTap,
             myLocationEnabled: true,
             myLocationButtonEnabled: true,
-            onMapCreated: (c) => _mapController = c,
+            markers: selectedLatLng == null
+                ? {}
+                : {
+                    Marker(
+                      markerId: const MarkerId('selected'),
+                      position: selectedLatLng!,
+                    ),
+                  },
           ),
 
           // 🔍 SEARCH BAR
           Positioned(
-            top: 10,
-            left: 12,
-            right: 12,
-            child: Column(
-              children: [
-                Material(
-                  elevation: 3,
-                  borderRadius: BorderRadius.circular(8),
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: _searchPlaces,
-                    decoration: const InputDecoration(
-                      hintText: 'Search places',
-                      prefixIcon: Icon(Icons.search),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.all(14),
-                    ),
+            top: 12,
+            left: 16,
+            right: 16,
+            child: Material(
+              elevation: 4,
+              borderRadius: BorderRadius.circular(12),
+              child: TextField(
+                controller: _searchController,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  hintText: 'Search location',
+                  prefixIcon: const Icon(Icons.search),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.all(14),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () => _searchController.clear(),
                   ),
                 ),
-
-                if (searchResults.isNotEmpty)
-                  Container(
-                    margin: const EdgeInsets.only(top: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: searchResults.length,
-                      itemBuilder: (_, i) {
-                        final p = searchResults[i];
-                        return ListTile(
-                          title: Text(p['description']),
-                          onTap: () => _selectPlace(p['place_id']),
-                        );
-                      },
-                    ),
-                  ),
-              ],
+                onSubmitted: _searchLocation,
+              ),
             ),
           ),
 
-          // ✅ CONFIRM
+          // 📍 ADDRESS CARD
+          if (address != null)
+            Positioned(
+              bottom: 100,
+              left: 16,
+              right: 16,
+              child: Card(
+                elevation: 4,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    '$address\n${emirate ?? 'Unknown emirate'}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ),
+            ),
+
+          // ✅ CONFIRM BUTTON
           Positioned(
+            bottom: 24,
             left: 16,
             right: 16,
-            bottom: 64,
-            child: ElevatedButton(
-              onPressed: selectedLatLng == null
-                  ? null
-                  : () {
-                      Navigator.pop(context, {
-                        'name': locationName,
-                        'lat': selectedLatLng!.latitude,
-                        'lng': selectedLatLng!.longitude,
-                        'emirate': detectedEmirate,
-                      });
-                    },
-              child: const Text('Confirm location'),
+            child: SizedBox(
+              height: 48,
+              child: ElevatedButton(
+                onPressed: selectedLatLng == null ? null : _confirm,
+                child: const Text('Confirm Location'),
+              ),
             ),
           ),
         ],

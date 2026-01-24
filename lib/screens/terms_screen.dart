@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'home_screen.dart';
 
 class TermsScreen extends StatefulWidget {
@@ -46,42 +47,83 @@ class _TermsConsentScreenState extends State<TermsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Terms & Conditions'),
-        automaticallyImplyLeading: false, // 🚫 NO BACK
+        automaticallyImplyLeading: false, // 🚫 no back
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Expanded(
-              child: SingleChildScrollView(
-                child: Text(
-                  '''
+            const Text(
+              'Before you continue',
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            Text(
+              'Please review and accept the terms below.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+
+            const SizedBox(height: 24),
+
+            Expanded(
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: SingleChildScrollView(
+                    child: Text(
+                      '''
 Welcome to LostUAE.
 
-By using this app you agree to:
-• Provide truthful information
-• Respect other users
-• Not misuse the platform
+By using this application, you agree to:
 
-LostUAE is not responsible for user interactions.
-                  ''',
-                  style: TextStyle(fontSize: 16),
+• Provide accurate and truthful information  
+• Respect other users and their property  
+• Use the platform responsibly and lawfully  
+
+LostUAE acts as a reporting platform and is not responsible for interactions between users.
+                      ''',
+                      style: const TextStyle(fontSize: 15, height: 1.5),
+                    ),
+                  ),
                 ),
               ),
             ),
+
+            const SizedBox(height: 16),
+
             CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
               value: agreed,
               onChanged: (v) => setState(() => agreed = v ?? false),
-              title: const Text('I agree to the Terms & Conditions'),
+              title: const Text(
+                'I agree to the Terms & Conditions',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              controlAffinity: ListTileControlAffinity.leading,
             ),
+
+            const SizedBox(height: 16),
+
             SizedBox(
-              width: double.infinity,
               height: 48,
               child: ElevatedButton(
                 onPressed: agreed && !loading ? _confirm : null,
                 child: loading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('Confirm'),
+                    ? const SizedBox(
+                        height: 22,
+                        width: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Confirm & Continue'),
               ),
             ),
           ],

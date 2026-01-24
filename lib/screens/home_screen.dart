@@ -8,6 +8,7 @@ import 'feed_screen.dart';
 import 'post_item_screen.dart';
 import 'profile_screen.dart';
 import 'setting_screen.dart';
+import 'chat system/chat_list_screen.dart';
 
 import '../CustomWidgets/notification_bell.dart';
 
@@ -35,17 +36,18 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
 
     _pages = [
-      const FeedScreen(),
-      PostItemScreen(
+      const FeedScreen(),            // 0
+      const ChatListScreen(),        // 1
+      PostItemScreen(                // 2
         onPostSuccess: () {
           setState(() => _currentIndex = 0);
         },
       ),
-      ProfileScreen(
+      ProfileScreen(                 // 3
         toggleTheme: widget.toggleTheme,
         isDarkMode: widget.isDarkMode,
         onCreatePost: () {
-          setState(() => _currentIndex = 1);
+          setState(() => _currentIndex = 2);
         },
       ),
     ];
@@ -54,69 +56,88 @@ class _HomeScreenState extends State<HomeScreen> {
   AppBar _buildAppBar() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // 📰 FEED
-    if (_currentIndex == 0) {
-      return  AppBar(
-        title: Text('LostUAE'),
-        actions: const[
-          NotificationBell(),
-        ],
-      );
+    switch (_currentIndex) {
+      case 0:
+        return AppBar(
+          title: const Text('LostUAE'),
+          actions: const [NotificationBell()],
+        );
+
+      case 1:
+        return AppBar(
+          title: const Text('Chats'),
+        );
+
+      case 2:
+        return AppBar(
+          title: const Text('Post Lost / Found Item'),
+          automaticallyImplyLeading: false,
+        );
+
+      case 3:
+        return AppBar(
+          title: const Text('Profile'),
+          automaticallyImplyLeading: false,
+          actions: [
+            IconButton(
+              onPressed: widget.toggleTheme,
+              icon: Icon(isDark ? Icons.wb_sunny : Icons.dark_mode),
+            ),
+            IconButton(
+              icon: const Icon(Icons.settings),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SettingsScreen(),
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+
+      default:
+        return AppBar(title: const Text('LostUAE'));
     }
-
-    // ➕ POST
-    if (_currentIndex == 1) {
-      return  AppBar(
-        title: Text('Post Lost / Found Item'),
-        automaticallyImplyLeading: false,
-      );
-    }
-
-    // 👤 PROFILE
-    return AppBar(
-      title: const Text('Profile'),
-      automaticallyImplyLeading: false,
-      actions: [
-        // 🌙 Dark / Light Mode
-        IconButton(
-          onPressed: widget.toggleTheme,
-          icon: Icon(
-            isDark ? Icons.wb_sunny : Icons.dark_mode,
-            color: isDark ? Colors.yellow : Colors.white,
-          ),
-        ),
-
-        // ⚙️ Settings
-        IconButton(
-          icon: const Icon(Icons.settings),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const SettingsScreen(),
-              ),
-            );
-          },
-        ),
-      ],
-    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: _buildAppBar(),
-      body: _pages[_currentIndex],
+
+      // 🔑 THIS IS THE MAGIC (NO MORE DISAPPEARING)
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _pages,
+      ),
+
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: (index) {
+          setState(() => _currentIndex = index);
+        },
+
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: theme.scaffoldBackgroundColor,
+        selectedItemColor: theme.colorScheme.primary,
+        unselectedItemColor:
+            theme.textTheme.bodySmall?.color?.withOpacity(0.6),
+
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home),
             label: 'Feed',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.add),
+            icon: Icon(Icons.chat_bubble_outline),
+            label: 'Chats',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.add_circle_outline),
             label: 'Post',
           ),
           BottomNavigationBarItem(

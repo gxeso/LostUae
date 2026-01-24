@@ -45,60 +45,119 @@ class ProfileScreen extends StatelessWidget {
           }
 
           final data = snapshot.data!.data() as Map<String, dynamic>;
+          final nickname = data['nickname'] ?? 'No nickname';
+          final email = data['email'] ?? '';
+          final phone = data['phone'] ?? 'Not provided';
 
-          return Padding(
-            padding: const EdgeInsets.all(24),
+          return SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Column(
               children: [
-                // 👤 Avatar
-                CircleAvatar(
-                  radius: 55,
-                  backgroundColor: Colors.grey[300],
-                  child: const Icon(Icons.person, size: 55, color: Colors.white),
+                const SizedBox(height: 24),
+
+                // 👤 AVATAR + NAME
+                Column(
+                  children: [
+                    CircleAvatar(
+                      radius: 48,
+                      backgroundColor:
+                          Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                      child: Icon(
+                        Icons.person,
+                        size: 48,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      nickname,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
 
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
 
-                // Nickname
-                Text(
-                  data['nickname'] ?? 'No nickname',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
+                // 📊 STATS (SOCIAL STYLE)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _StatItem(
+                      label: 'Posts',
+                      value: (data['postCount'] ?? 0).toString(),
+                    ),
+                    _StatItem(
+                      label: 'Status',
+                      value: 'Active',
+                    ),
+                    _StatItem(
+                      label: 'Role',
+                      value: 'User',
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 32),
+
+                // 🎯 ACTION BUTTONS
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => MyPostsScreen(
+                                onCreatePost: onCreatePost,
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('My Posts'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: onCreatePost,
+                        child: const Text('New Post'),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 32),
+
+                // ℹ️ INFO SECTION
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Account Information',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: 12),
 
-                _infoTile('Email', data['email'] ?? ''),
-                _infoTile('User ID', user.uid),
-                _infoTile('Phone', data['phone'] ?? 'Not provided'),
-
-                const SizedBox(height: 30),
-
-                // 📦 My Posts
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.inventory_2_outlined),
-                    label: const Text('My Posts'),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => MyPostsScreen(
-                            onCreatePost: onCreatePost,
-                          ),
-                        ),
-                      );
-                    },
+                Card(
+                  child: Column(
+                    children: [
+                      _InfoRow(label: 'Email', value: email),
+                      _Divider(),
+                      _InfoRow(label: 'Phone', value: phone),
+                      _Divider(),
+                      _InfoRow(label: 'User ID', value: user.uid),
+                    ],
                   ),
                 ),
 
-                const Spacer(),
+                const SizedBox(height: 32),
 
-                // 🚪 Logout
+                // 🚪 LOGOUT
                 SizedBox(
                   width: double.infinity,
                   height: 48,
@@ -121,6 +180,8 @@ class ProfileScreen extends StatelessWidget {
                     },
                   ),
                 ),
+
+                const SizedBox(height: 32),
               ],
             ),
           );
@@ -128,25 +189,83 @@ class ProfileScreen extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _infoTile(String title, String value) {
+/* ========================================================================== */
+/*                               UI HELPERS                                   */
+/* ========================================================================== */
+
+class _StatItem extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _StatItem({
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _InfoRow({
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
         children: [
-          Text(title,
-              style: const TextStyle(fontSize: 14, color: Colors.grey)),
-          const SizedBox(height: 4),
           Text(
-            value,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
+            label,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const Spacer(),
+          Expanded(
+            flex: 2,
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _Divider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Divider(
+      height: 1,
+      thickness: 0.6,
+      color: Theme.of(context).dividerColor,
     );
   }
 }

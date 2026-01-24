@@ -2,13 +2,13 @@
 // Joint work – All rights reserved
 // Unauthorized use prohibited
 
-
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import 'edit_item_screen.dart';
 import 'package:lost_uae/CustomWidgets/empty_my_posts.dart';
+import 'feed_screen.dart'; // for FeedItemCard
 
 class MyPostsScreen extends StatelessWidget {
   final VoidCallback onCreatePost;
@@ -23,7 +23,9 @@ class MyPostsScreen extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      return const Center(child: Text('Not logged in'));
+      return const Scaffold(
+        body: Center(child: Text('Not logged in')),
+      );
     }
 
     return Scaffold(
@@ -45,7 +47,7 @@ class MyPostsScreen extends StatelessWidget {
             return EmptyMyPosts(
               onCreate: () {
                 Navigator.pop(context); // back to profile
-                onCreatePost(); // 🔥 switch to Post tab
+                onCreatePost(); // switch to Post tab
               },
             );
           }
@@ -59,45 +61,73 @@ class MyPostsScreen extends StatelessWidget {
               final doc = docs[index];
               final data = doc.data() as Map<String, dynamic>;
 
-              return Card(
-                margin: const EdgeInsets.only(bottom: 16),
-                child: ListTile(
-                  title: Text(data['itemName']),
-                  subtitle: Text(data['location']),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit, color: Colors.blue),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => EditItemScreen(
-                                docId: doc.id,
-                                data: data,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () async {
-                          await FirebaseFirestore.instance
-                              .collection('items')
-                              .doc(doc.id)
-                              .delete();
-                        },
-                      ),
-                    ],
+              return Column(
+                children: [
+                  // 🧩 REUSED FEED CARD
+                  FeedItemCard(
+                    itemId: doc.id,
+                    status: data['status'],
+                    isClaimed: data['isClaimed'] == true,
+                    itemName: data['itemName'],
+                    location:
+                        data['locationName'] ?? data['location'] ?? '',
+                    emirate: data['emirate'],
+                    time: _formatTime(data['createdAt']),
+                    imageUrl: data['imageUrl'],
                   ),
-                ),
+
+                  // ✏️ ACTION ROW
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton.icon(
+                          icon: const Icon(Icons.edit_outlined),
+                          label: const Text('Edit'),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => EditItemScreen(
+                                  docId: doc.id,
+                                  data: data,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        TextButton.icon(
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('Delete'),
+                          onPressed: () async {
+                            await FirebaseFirestore.instance
+                                .collection('items')
+                                .doc(doc.id)
+                                .delete();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+                ],
               );
             },
           );
         },
       ),
     );
+  }
+
+  String _formatTime(Timestamp? timestamp) {
+    if (timestamp == null) return 'Just now';
+    final diff = DateTime.now().difference(timestamp.toDate());
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+    if (diff.inHours < 24) return '${diff.inHours} hours ago';
+    return '${diff.inDays} days ago';
   }
 }

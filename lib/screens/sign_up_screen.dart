@@ -5,7 +5,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'utils/validators.dart';
+import '../theme/app_colors.dart';
 
 class SignUpScreen extends StatefulWidget {
   final VoidCallback toggleTheme;
@@ -45,7 +47,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
     final password = passwordController.text.trim();
     final confirmPassword = confirmPasswordController.text.trim();
 
-    if ([nickname, email, phone, password, confirmPassword].any((e) => e.isEmpty)) {
+    if ([nickname, email, phone, password, confirmPassword]
+        .any((e) => e.isEmpty)) {
       _showError('Please fill in all fields');
       return;
     }
@@ -86,28 +89,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       final uid = credential.user!.uid;
 
-    await FirebaseFirestore.instance
-    .collection('users')
-    .doc(uid)
-    .set({
-  'uid': uid,
-  'nickname': nickname,
-  'email': email,
-  'phone': phone,
-  'createdAt': Timestamp.now(),      // ✅ required
-  'postCount': 0,                    // ✅ REQUIRED for rate limit
-  'lastPostAt': Timestamp.now(),     // ✅ REQUIRED for rate limit
-});
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'uid': uid,
+        'nickname': nickname,
+        'email': email,
+        'phone': phone,
+        'createdAt': Timestamp.now(),
+        'postCount': 0,
+        'lastPostAt': Timestamp.now(),
+      });
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          backgroundColor: Colors.green,
           content: Text('Account created successfully'),
         ),
       );
 
-      Navigator.pop(context); // Back to login
-
+      Navigator.pop(context);
     } on FirebaseAuthException catch (e) {
       String message = 'Sign up failed';
 
@@ -121,13 +119,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       _showError(message);
     } on FirebaseException {
-      _showError('Account created but profile failed. Please contact support.');
+      _showError(
+        'Account created but profile failed. Please contact support.',
+      );
     }
   }
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(backgroundColor: Colors.red, content: Text(message)),
+      SnackBar(
+        backgroundColor: AppColors.error,
+        content: Text(message),
+      ),
     );
   }
 
@@ -136,130 +139,91 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Create Account'),
-        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
 
               const Text(
                 'Join LostUAE',
-                style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
+
               const SizedBox(height: 8),
-              const Text(
+
+              Text(
                 'Create a new account',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
 
               const SizedBox(height: 40),
 
-              // Nickname
-              const Text('Nickname', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
               TextField(
                 controller: nicknameController,
-                decoration: InputDecoration(
-                  hintText: 'Enter your nickname',
-                  helperText: '3–15 letters or numbers, no spaces.',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                decoration: const InputDecoration(
+                  labelText: 'Nickname',
+                  helperText: '3–15 letters or numbers',
                 ),
               ),
 
               const SizedBox(height: 20),
 
-              // Email
-              const Text('Email', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
               TextField(
                 controller: emailController,
                 keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(
-                  hintText: 'example@email.com',
-                  helperText: "We'll use this for account recovery only.",
-                  helperMaxLines: 2,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  helperText: 'Used for account recovery only',
                 ),
               ),
 
               const SizedBox(height: 20),
 
-              // Phone
-              const Text('Phone Number', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
               TextField(
                 controller: phoneController,
                 keyboardType: TextInputType.phone,
-                decoration: InputDecoration(
-                  hintText: '05X XXX XXXX',
-                  helperText: 'UAE numbers only (starts with 05).',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                decoration: const InputDecoration(
+                  labelText: 'Phone Number',
+                  helperText: 'UAE numbers only (starts with 05)',
                 ),
               ),
 
               const SizedBox(height: 20),
 
-              // Password
-              const Text('Password', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
               TextField(
                 controller: passwordController,
                 obscureText: true,
-                decoration: InputDecoration(
-                  hintText: 'Create a strong password',
+                decoration: const InputDecoration(
+                  labelText: 'Password',
                   helperText:
-                      'At least 8 characters, with uppercase, lowercase, and a number.',
-                  helperMaxLines: 2,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                      'At least 8 characters with letters and numbers',
                 ),
               ),
 
               const SizedBox(height: 20),
 
-              // Confirm Password
-              const Text('Confirm Password',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
               TextField(
                 controller: confirmPasswordController,
                 obscureText: true,
-                decoration: InputDecoration(
-                  hintText: 'Repeat your password',
-                  helperText: 'Must match the password above.',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                decoration: const InputDecoration(
+                  labelText: 'Confirm Password',
                 ),
               ),
 
-              const SizedBox(height: 30),
+              const SizedBox(height: 32),
 
               SizedBox(
-                width: double.infinity,
                 height: 48,
                 child: ElevatedButton(
                   onPressed: _handleSignUp,
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text(
-                    'Create Account',
-                    style: TextStyle(fontSize: 18),
-                  ),
+                  child: const Text('Create Account'),
                 ),
               ),
             ],

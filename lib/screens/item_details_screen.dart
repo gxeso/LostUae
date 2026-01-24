@@ -5,6 +5,14 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'chat system/chat_screen.dart';
+import 'chat system/chat_service.dart';
+import 'utils/chat_utils.dart';
+
+
+import 'edit_item_screen.dart';
+
+
 
 class ItemDetailsScreen extends StatefulWidget {
   final String itemId;
@@ -39,6 +47,12 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
         }
       });
     }
+  }
+
+  Color _statusColor(BuildContext context, String status, bool isClaimed) {
+    if (isClaimed) return Theme.of(context).disabledColor;
+    if (status == 'Lost') return Theme.of(context).colorScheme.error;
+    return Theme.of(context).colorScheme.primary;
   }
 
   @override
@@ -78,8 +92,14 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
         final isOwner =
             currentUser != null && currentUser.uid == ownerId;
 
+        final canChat =
+            currentUser != null && !isOwner && !isClaimed;
+
         final time =
             createdAt != null ? _formatTime(createdAt) : '';
+
+        final statusColor =
+            _statusColor(context, status, isClaimed);
 
         return Scaffold(
           appBar: AppBar(
@@ -88,17 +108,36 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
           body: ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              // 🔴 STATUS CHIP
-              Chip(
-                label: Text(
-                  isClaimed ? 'CLAIMED' : status,
-                  style: const TextStyle(color: Colors.white),
+              if (imageUrl != null && imageUrl.isNotEmpty)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.network(
+                    imageUrl,
+                    height: 260,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
                 ),
-                backgroundColor: isClaimed
-                    ? Colors.grey
-                    : status == 'Lost'
-                        ? Colors.red
-                        : Colors.green,
+
+              const SizedBox(height: 24),
+
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  isClaimed ? 'CLAIMED' : status.toUpperCase(),
+                  style: TextStyle(
+                    color: statusColor,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.6,
+                  ),
+                ),
               ),
 
               const SizedBox(height: 16),
@@ -111,44 +150,21 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                 ),
               ),
 
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
 
-              // 📍 LOCATION
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.place, size: 18, color: Colors.grey),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      location,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      _InfoRow(icon: Icons.place, text: location),
+                      const SizedBox(height: 8),
+                      _InfoRow(icon: Icons.map_outlined, text: emirate),
+                      const SizedBox(height: 8),
+                      _InfoRow(icon: Icons.access_time, text: time),
+                    ],
                   ),
-                ],
-              ),
-
-              const SizedBox(height: 6),
-
-              Row(
-                children: [
-                  const Icon(Icons.map_outlined,
-                      size: 18, color: Colors.grey),
-                  const SizedBox(width: 6),
-                  Text(emirate),
-                ],
-              ),
-
-              const SizedBox(height: 6),
-
-              Row(
-                children: [
-                  const Icon(Icons.access_time,
-                      size: 18, color: Colors.grey),
-                  const SizedBox(width: 6),
-                  Text(time),
-                ],
+                ),
               ),
 
               const SizedBox(height: 24),
@@ -156,60 +172,124 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
               const Text(
                 'Description',
                 style: TextStyle(
-                    fontSize: 20, fontWeight: FontWeight.bold),
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
 
               const SizedBox(height: 8),
 
               Text(description),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
 
-              if (imageUrl != null && imageUrl.isNotEmpty)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    imageUrl,
-                    height: 240,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-
-              const SizedBox(height: 24),
-
-              // ✅ MARK AS CLAIMED
-              if (isOwner && !isClaimed)
+              // 🗨 CHAT BUTTON (NON-OWNER ONLY)
+              if (canChat)
                 SizedBox(
                   width: double.infinity,
                   height: 48,
-                  child: ElevatedButton.icon(
-                    icon:
-                        const Icon(Icons.check_circle_outline),
-                    label: const Text('Mark as Claimed'),
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    label: const Text('Chat with owner'),
                     onPressed: () async {
-                      await FirebaseFirestore.instance
-                          .collection('items')
-                          .doc(widget.itemId)
-                          .update({
-                        'isClaimed': true,
-                        'claimedAt': Timestamp.now(),
-                      });
+                      final caseId = buildCaseId(
+                        widget.itemId,
+                        currentUser.uid,
+                        ownerId,
+                      );
 
-                      ScaffoldMessenger.of(context)
-                          .showSnackBar(
-                        const SnackBar(
-                          content:
-                              Text('Item marked as claimed'),
+                      await createCaseAndChat(
+                        caseId: caseId,
+                        lostUserId:
+                            status == 'Lost' ? ownerId : currentUser.uid,
+                        foundUserId:
+                            status == 'Lost' ? currentUser.uid : ownerId,
+                        itemId: widget.itemId,
+                        itemName: name,
+                      );
+
+                      if (!context.mounted) return;
+
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ChatScreen(caseId: caseId),
                         ),
                       );
                     },
                   ),
                 ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 16),
 
-              // 🔗 SIMILAR ITEMS
+              // 🔒 OWNER ACTIONS
+              if (isOwner)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        if (!isClaimed)
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: ElevatedButton.icon(
+                              icon:
+                                  const Icon(Icons.check_circle_outline),
+                              label:
+                                  const Text('Mark as Claimed'),
+                              onPressed: () async {
+                                await FirebaseFirestore.instance
+                                    .collection('items')
+                                    .doc(widget.itemId)
+                                    .update({
+                                  'isClaimed': true,
+                                  'claimedAt': Timestamp.now(),
+                                });
+
+                                ScaffoldMessenger.of(context)
+                                    .showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'Item marked as claimed'),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+
+                        if (!isClaimed) const SizedBox(height: 12),
+
+                        if (!isClaimed)
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: OutlinedButton.icon(
+                              icon:
+                                  const Icon(Icons.edit_outlined),
+                              label:
+                                  const Text('Edit Item'),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        EditItemScreen(
+                                      docId: widget.itemId,
+                                      data: data,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              const SizedBox(height: 40),
+
               if (!isClaimed)
                 Container(
                   key: _similarityKey,
@@ -232,6 +312,32 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
   }
 }
 
+/* ================= INFO ROW ================= */
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _InfoRow({
+    required this.icon,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text)),
+      ],
+    );
+  }
+}
+
+
+
 /* ========================================================================== */
 /*                               SIMILAR ITEMS                                */
 /* ========================================================================== */
@@ -253,28 +359,33 @@ class SimilarItemsSection extends StatelessWidget {
       children: [
         const Text(
           'Similar Items',
-          style:
-              TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+          ),
         ),
+
         const SizedBox(height: 12),
 
         StreamBuilder<QuerySnapshot>(
           stream: firestore
               .collection('matched')
-              .where('sourceId',
-                  isEqualTo: currentItemId)
+              .where('sourceId', isEqualTo: currentItemId)
               .snapshots(),
           builder: (context, sourceSnap) {
             return StreamBuilder<QuerySnapshot>(
               stream: firestore
                   .collection('matched')
-                  .where('targetId',
-                      isEqualTo: currentItemId)
+                  .where('targetId', isEqualTo: currentItemId)
                   .snapshots(),
               builder: (context, targetSnap) {
-                if (!sourceSnap.hasData ||
-                    !targetSnap.hasData) {
-                  return const CircularProgressIndicator();
+                if (!sourceSnap.hasData || !targetSnap.hasData) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
                 }
 
                 final allDocs = [
@@ -283,9 +394,12 @@ class SimilarItemsSection extends StatelessWidget {
                 ];
 
                 if (allDocs.isEmpty) {
-                  return const Text(
-                    'No similar items found yet.',
-                    style: TextStyle(color: Colors.grey),
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Text(
+                      'No similar items found yet.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   );
                 }
 
@@ -300,8 +414,7 @@ class SimilarItemsSection extends StatelessWidget {
                             : data['sourceId'];
 
                     final score =
-                        (data['score'] as num?)?.toDouble() ??
-                            0.0;
+                        (data['score'] as num?)?.toDouble() ?? 0.0;
 
                     return SimilarItemCard(
                       itemId: otherItemId,
@@ -318,9 +431,6 @@ class SimilarItemsSection extends StatelessWidget {
   }
 }
 
-/* ========================================================================== */
-/*                            SIMILAR ITEM CARD                               */
-/* ========================================================================== */
 
 class SimilarItemCard extends StatelessWidget {
   final String itemId;
@@ -346,12 +456,18 @@ class SimilarItemCard extends StatelessWidget {
 
         final data =
             snapshot.data!.data() as Map<String, dynamic>;
+
         final name = data['itemName'] ?? 'Unnamed item';
+        final emirate = data['emirate'] ?? '';
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
           child: ListTile(
-            title: Text(name),
+            title: Text(
+              name,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(emirate),
             trailing: SimilarityCircle(score: score),
             onTap: () {
               Navigator.push(
@@ -368,11 +484,6 @@ class SimilarItemCard extends StatelessWidget {
     );
   }
 }
-
-/* ========================================================================== */
-/*                             SCORE CIRCLE                                   */
-/* ========================================================================== */
-
 class SimilarityCircle extends StatelessWidget {
   final double score;
 
@@ -384,20 +495,21 @@ class SimilarityCircle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final percent = (score * 100).round();
+    final color = Theme.of(context).colorScheme.primary;
 
     return Container(
       width: 46,
       height: 46,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.blue, width: 3),
-        color: Colors.blue.withOpacity(0.08),
+        border: Border.all(color: color, width: 3),
+        color: color.withOpacity(0.08),
       ),
       alignment: Alignment.center,
       child: Text(
         '$percent%',
-        style: const TextStyle(
-          color: Colors.blue,
+        style: TextStyle(
+          color: color,
           fontWeight: FontWeight.bold,
         ),
       ),

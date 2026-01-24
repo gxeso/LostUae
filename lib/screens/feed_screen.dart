@@ -240,9 +240,27 @@ class FeedItemCard extends StatelessWidget {
     this.imageUrl,
   });
 
+  Color _statusColor(BuildContext context) {
+    if (isClaimed) {
+      return Theme.of(context).disabledColor;
+    }
+    if (status == 'Lost') {
+      return Theme.of(context).colorScheme.error;
+    }
+    return Theme.of(context).colorScheme.primary;
+  }
+
+  String _statusText() {
+    if (isClaimed) return 'CLAIMED';
+    return status.toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return InkWell(
+      borderRadius: BorderRadius.circular(16),
       onTap: () {
         Navigator.push(
           context,
@@ -253,15 +271,14 @@ class FeedItemCard extends StatelessWidget {
       },
       child: Card(
         margin: const EdgeInsets.only(bottom: 16),
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 🖼 IMAGE
             if (imageUrl != null && imageUrl!.isNotEmpty)
               ClipRRect(
                 borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(12)),
+                    const BorderRadius.vertical(top: Radius.circular(16)),
                 child: Image.network(
                   imageUrl!,
                   height: 180,
@@ -275,21 +292,39 @@ class FeedItemCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Chip(
-                    label: Text(
-                      isClaimed
-                          ? 'CLAIMED • $emirate'
-                          : '$status • $emirate',
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    backgroundColor:
-                        isClaimed ? Colors.grey : status == 'Lost'
-                            ? Colors.red
-                            : Colors.green,
+                  // 🏷 STATUS + EMIRATE
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _statusColor(context).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          _statusText(),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _statusColor(context),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        emirate,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
                   ),
 
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
 
+                  // 📦 ITEM NAME
                   Text(
                     itemName,
                     style: const TextStyle(
@@ -298,18 +333,19 @@ class FeedItemCard extends StatelessWidget {
                     ),
                   ),
 
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
 
+                  // 📍 LOCATION
                   Row(
                     children: [
-                      const Icon(Icons.location_on,
-                          size: 16, color: Colors.grey),
-                      const SizedBox(width: 4),
+                      const Icon(Icons.location_on, size: 16),
+                      const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           location,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium,
                         ),
                       ),
                     ],
@@ -317,12 +353,15 @@ class FeedItemCard extends StatelessWidget {
 
                   const SizedBox(height: 6),
 
+                  // ⏱ TIME
                   Row(
                     children: [
-                      const Icon(Icons.access_time,
-                          size: 16, color: Colors.grey),
-                      const SizedBox(width: 4),
-                      Text(time),
+                      const Icon(Icons.access_time, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        time,
+                        style: theme.textTheme.bodySmall,
+                      ),
                     ],
                   ),
                 ],
