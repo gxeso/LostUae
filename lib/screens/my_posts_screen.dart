@@ -66,6 +66,7 @@ class MyPostsScreen extends StatelessWidget {
                   // 🧩 REUSED FEED CARD
                   FeedItemCard(
                     itemId: doc.id,
+                    userId: data['userId'],
                     status: data['status'],
                     isClaimed: data['isClaimed'] == true,
                     itemName: data['itemName'],

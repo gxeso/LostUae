@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'passport_verification_screen.dart';
 
-import 'home_screen.dart';
 
 class TermsScreen extends StatefulWidget {
   const TermsScreen({super.key});
@@ -31,15 +31,13 @@ class _TermsConsentScreenState extends State<TermsScreen> {
     });
 
     Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(
-        builder: (_) => HomeScreen(
-          toggleTheme: () {},
-          isDarkMode: false,
-        ),
-      ),
-      (route) => false,
-    );
+  context,
+  MaterialPageRoute(
+    builder: (_) => const PassportVerificationScreen(),
+  ),
+  (route) => false,
+);
+
   }
 
   @override

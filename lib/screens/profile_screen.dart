@@ -45,9 +45,24 @@ class ProfileScreen extends StatelessWidget {
           }
 
           final data = snapshot.data!.data() as Map<String, dynamic>;
+
           final nickname = data['nickname'] ?? 'No nickname';
           final email = data['email'] ?? '';
           final phone = data['phone'] ?? 'Not provided';
+          final postCount = data['postCount'] ?? 0;
+
+          final verificationStatus =
+              data['verificationStatus'] ?? 'none';
+
+          final bool isVerified =
+              verificationStatus == 'approved' ||
+              verificationStatus == 'verified';
+
+          final bool isPending =
+              verificationStatus == 'pending_review';
+
+          final String roleLabel =
+              isVerified ? 'Verified User' : 'Guest';
 
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -55,54 +70,98 @@ class ProfileScreen extends StatelessWidget {
               children: [
                 const SizedBox(height: 24),
 
-                // 👤 AVATAR + NAME
-                Column(
+                /* ================= AVATAR ================= */
+
+                Stack(
                   children: [
                     CircleAvatar(
                       radius: 48,
-                      backgroundColor:
-                          Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                      backgroundColor: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withOpacity(0.15),
                       child: Icon(
                         Icons.person,
                         size: 48,
-                        color: Theme.of(context).colorScheme.primary,
+                        color:
+                            Theme.of(context).colorScheme.primary,
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      nickname,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
+
+                    if (isVerified)
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Tooltip(
+                          message: 'Verified account',
+                          child: CircleAvatar(
+                            radius: 14,
+                            backgroundColor: Colors.blue,
+                            child: const Icon(
+                              Icons.verified,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
                   ],
                 ),
 
+                const SizedBox(height: 12),
+
+                Text(
+                  nickname,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+
+                const SizedBox(height: 6),
+
+                _VerificationStatusChip(
+                  isVerified: isVerified,
+                  isPending: isPending,
+                ),
+
+                const SizedBox(height: 20),
+
+                /* ================= PENDING BANNER ================= */
+
+                if (isPending)
+                  _PendingVerificationBanner(),
+
                 const SizedBox(height: 24),
 
-                // 📊 STATS (SOCIAL STYLE)
+                /* ================= STATS ================= */
+
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _StatItem(
                       label: 'Posts',
-                      value: (data['postCount'] ?? 0).toString(),
+                      value: postCount.toString(),
                     ),
                     _StatItem(
                       label: 'Status',
-                      value: 'Active',
+                      value: isVerified
+                          ? 'Verified'
+                          : isPending
+                              ? 'Pending'
+                              : 'Unverified',
                     ),
                     _StatItem(
                       label: 'Role',
-                      value: 'User',
+                      value: roleLabel,
                     ),
                   ],
                 ),
 
                 const SizedBox(height: 32),
 
-                // 🎯 ACTION BUTTONS
+                /* ================= ACTIONS ================= */
+
                 Row(
                   children: [
                     Expanded(
@@ -123,16 +182,33 @@ class ProfileScreen extends StatelessWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: onCreatePost,
+                        onPressed:
+                            isVerified ? onCreatePost : null,
                         child: const Text('New Post'),
                       ),
                     ),
                   ],
                 ),
 
+                if (!isVerified)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(
+                      isPending
+                          ? 'You can post once verification is approved.'
+                          : 'Verify your identity to create posts.',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Colors.orange),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+
                 const SizedBox(height: 32),
 
-                // ℹ️ INFO SECTION
+                /* ================= INFO ================= */
+
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
@@ -157,7 +233,8 @@ class ProfileScreen extends StatelessWidget {
 
                 const SizedBox(height: 32),
 
-                // 🚪 LOGOUT
+                /* ================= LOGOUT ================= */
+
                 SizedBox(
                   width: double.infinity,
                   height: 48,
@@ -186,6 +263,81 @@ class ProfileScreen extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/* ========================================================================== */
+/*                               STATUS WIDGETS                               */
+/* ========================================================================== */
+
+class _VerificationStatusChip extends StatelessWidget {
+  final bool isVerified;
+  final bool isPending;
+
+  const _VerificationStatusChip({
+    required this.isVerified,
+    required this.isPending,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Color color;
+    String text;
+    IconData icon;
+
+    if (isVerified) {
+      color = Colors.green;
+      text = 'Verified';
+      icon = Icons.verified;
+    } else if (isPending) {
+      color = Colors.orange;
+      text = 'Verification Pending';
+      icon = Icons.hourglass_top;
+    } else {
+      color = Colors.redAccent;
+      text = 'Unverified';
+      icon = Icons.info_outline;
+    }
+
+    return Chip(
+      avatar: Icon(icon, size: 16, color: Colors.white),
+      label: Text(text),
+      backgroundColor: color,
+      labelStyle: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+  }
+}
+
+class _PendingVerificationBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange),
+      ),
+      child: Row(
+        children: const [
+          Icon(Icons.hourglass_top, color: Colors.orange),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Your identity is under review. '
+              'You’ll be notified once verification is complete.',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

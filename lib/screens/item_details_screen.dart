@@ -5,14 +5,11 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import 'chat system/chat_screen.dart';
 import 'chat system/chat_service.dart';
 import 'utils/chat_utils.dart';
-
-
 import 'edit_item_screen.dart';
-
-
 
 class ItemDetailsScreen extends StatefulWidget {
   final String itemId;
@@ -88,6 +85,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
         final createdAt = data['createdAt'] as Timestamp?;
         final isClaimed = data['isClaimed'] == true;
         final ownerId = data['userId'];
+        final reward = data['rewardAed'];
 
         final isOwner =
             currentUser != null && currentUser.uid == ownerId;
@@ -121,6 +119,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
 
               const SizedBox(height: 24),
 
+              // STATUS
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -140,8 +139,34 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                 ),
               ),
 
+              // 💰 REWARD (GREEN, AED)
+              if (reward != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.monetization_on, color: Colors.green),
+                      SizedBox(width: 6),
+                    ],
+                  ),
+                ),
+
+              if (reward != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Reward: AED $reward',
+                    style: const TextStyle(
+                      color: Colors.green,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+
               const SizedBox(height: 16),
 
+              // ITEM NAME
               Text(
                 name,
                 style: const TextStyle(
@@ -150,8 +175,14 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                 ),
               ),
 
+              const SizedBox(height: 6),
+
+              // 👤 USERNAME
+              _PostedByUser(userId: ownerId),
+
               const SizedBox(height: 16),
 
+              // INFO CARD
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -183,7 +214,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
 
               const SizedBox(height: 32),
 
-              // 🗨 CHAT BUTTON (NON-OWNER ONLY)
+              // CHAT BUTTON
               if (canChat)
                 SizedBox(
                   width: double.infinity,
@@ -222,7 +253,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
 
               const SizedBox(height: 16),
 
-              // 🔒 OWNER ACTIONS
+              // OWNER ACTIONS
               if (isOwner)
                 Card(
                   child: Padding(
@@ -312,6 +343,39 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
   }
 }
 
+/* ================= POSTED BY USER ================= */
+
+class _PostedByUser extends StatelessWidget {
+  final String userId;
+
+  const _PostedByUser({required this.userId});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return const SizedBox.shrink();
+        }
+
+        final data = snapshot.data!.data() as Map<String, dynamic>;
+        final nickname = data['nickname'] ?? 'User';
+
+        return Text(
+          'Posted by @$nickname',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w500,
+              ),
+        );
+      },
+    );
+  }
+}
+
 /* ================= INFO ROW ================= */
 
 class _InfoRow extends StatelessWidget {
@@ -326,7 +390,6 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(icon, size: 18),
         const SizedBox(width: 8),

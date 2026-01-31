@@ -1,8 +1,15 @@
+// © 2026 Project LostUAE
+// Joint work – All rights reserved
+// Unauthorized use prohibited
+
+
 import 'package:flutter/material.dart';
 import 'change_email_screen.dart';
 import 'change_password_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'delete_account_screen.dart';
+import 'passport_verification_screen.dart';
+
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -27,6 +34,20 @@ class SettingsScreen extends StatelessWidget {
           _item(context, Icons.lock, 'Change Password', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangePasswordScreen()))),
           _item(context, Icons.privacy_tip, 'Privacy Policy', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()))),
           _item(context, Icons.delete_forever, 'Delete Account', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DeleteAccountScreen()))),
+          _item(
+  context,
+  Icons.verified_user,
+  'Verify Identity',
+  () => Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => const PassportVerificationScreen(),
+    ),
+  ),
+),
+
+
+
         ],
       ),
     );

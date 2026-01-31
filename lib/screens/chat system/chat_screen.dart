@@ -20,6 +20,43 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
+  String? otherUserName;
+  bool loadingHeader = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadChatHeader();
+  }
+
+  Future<void> _loadChatHeader() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    final roomSnap = await FirebaseFirestore.instance
+        .collection('chat_rooms')
+        .doc(widget.caseId)
+        .get();
+
+    if (!roomSnap.exists) return;
+
+    final data = roomSnap.data()!;
+    final otherUserId =
+        data['lostUserId'] == currentUser.uid
+            ? data['foundUserId']
+            : data['lostUserId'];
+
+    final userSnap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(otherUserId)
+        .get();
+
+    setState(() {
+      otherUserName = userSnap.data()?['nickname'] ?? 'User';
+      loadingHeader = false;
+    });
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -39,7 +76,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chat'),
+        title: loadingHeader
+            ? const Text('Chat')
+            : Text('Chat with @$otherUserName'),
       ),
       body: Column(
         children: [
@@ -54,7 +93,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
                 }
 
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -101,15 +142,11 @@ class _ChatScreenState extends State<ChatScreen> {
                       decoration: InputDecoration(
                         hintText: 'Type a message…',
                         filled: true,
-                        fillColor:
-                            Theme.of(context).colorScheme.surface,
                         border: OutlineInputBorder(
-                          borderRadius:
-                              BorderRadius.circular(24),
+                          borderRadius: BorderRadius.circular(24),
                           borderSide: BorderSide.none,
                         ),
-                        contentPadding:
-                            const EdgeInsets.symmetric(
+                        contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16,
                           vertical: 10,
                         ),
@@ -193,10 +230,7 @@ class _ChatBubble extends StatelessWidget {
           children: [
             Text(
               text,
-              style: TextStyle(
-                color: textColor,
-                fontSize: 15,
-              ),
+              style: TextStyle(color: textColor, fontSize: 15),
             ),
             const SizedBox(height: 4),
             Text(

@@ -1,3 +1,8 @@
+// © 2026 Project LostUAE
+// Joint work – All rights reserved
+// Unauthorized use prohibited
+
+
 import 'package:flutter/material.dart';
 
 class PrivacyPolicyScreen extends StatelessWidget {

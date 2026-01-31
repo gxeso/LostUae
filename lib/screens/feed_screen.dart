@@ -106,17 +106,18 @@ class _FeedScreenState extends State<FeedScreen> {
                   final data =
                       docs[index].data() as Map<String, dynamic>;
 
-                 return FeedItemCard(
-  itemId: docs[index].id,
-  status: data['status'],
-  isClaimed: data['isClaimed'] == true,
-  itemName: data['itemName'],
-  location: data['locationName'] ?? data['location'] ?? '',
-  emirate: data['emirate'],
-  time: _formatTime(data['createdAt']),
-  imageUrl: data['imageUrl'],
-);
-
+                  return FeedItemCard(
+                    itemId: docs[index].id,
+                    userId: data['userId'],
+                    status: data['status'],
+                    isClaimed: data['isClaimed'] == true,
+                    itemName: data['itemName'],
+                    location:
+                        data['locationName'] ?? data['location'] ?? '',
+                    emirate: data['emirate'],
+                    time: _formatTime(data['createdAt']),
+                    imageUrl: data['imageUrl'],
+                  );
                 },
               );
             },
@@ -220,6 +221,7 @@ class _FeedScreenState extends State<FeedScreen> {
 
 class FeedItemCard extends StatelessWidget {
   final String itemId;
+  final String userId;
   final String status;
   final bool isClaimed;
   final String itemName;
@@ -231,6 +233,7 @@ class FeedItemCard extends StatelessWidget {
   const FeedItemCard({
     super.key,
     required this.itemId,
+    required this.userId,
     required this.status,
     required this.isClaimed,
     required this.itemName,
@@ -274,7 +277,6 @@ class FeedItemCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 🖼 IMAGE
             if (imageUrl != null && imageUrl!.isNotEmpty)
               ClipRRect(
                 borderRadius:
@@ -292,8 +294,9 @@ class FeedItemCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 🏷 STATUS + EMIRATE
+                  // STATUS + EMIRATE + USERNAME
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -319,12 +322,13 @@ class FeedItemCard extends StatelessWidget {
                         emirate,
                         style: theme.textTheme.bodySmall,
                       ),
+                      const Spacer(),
+                      _UsernameChip(userId: userId),
                     ],
                   ),
 
                   const SizedBox(height: 12),
 
-                  // 📦 ITEM NAME
                   Text(
                     itemName,
                     style: const TextStyle(
@@ -333,9 +337,35 @@ class FeedItemCard extends StatelessWidget {
                     ),
                   ),
 
+                  // 💰 REWARD (ADDED)
+                  StreamBuilder<DocumentSnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('items')
+                        .doc(itemId)
+                        .snapshots(),
+                    builder: (context, snap) {
+                      if (!snap.hasData) return const SizedBox.shrink();
+                      final data =
+                          snap.data!.data() as Map<String, dynamic>;
+                      final reward = data['rewardAed'];
+
+                      if (reward == null) return const SizedBox.shrink();
+
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          'Reward: AED $reward',
+                          style: const TextStyle(
+                            color: Colors.green,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+
                   const SizedBox(height: 10),
 
-                  // 📍 LOCATION
                   Row(
                     children: [
                       const Icon(Icons.location_on, size: 16),
@@ -353,7 +383,6 @@ class FeedItemCard extends StatelessWidget {
 
                   const SizedBox(height: 6),
 
-                  // ⏱ TIME
                   Row(
                     children: [
                       const Icon(Icons.access_time, size: 16),
@@ -373,3 +402,39 @@ class FeedItemCard extends StatelessWidget {
     );
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/*                          USERNAME CHIP (SMALL)                              */
+/* -------------------------------------------------------------------------- */
+
+class _UsernameChip extends StatelessWidget {
+  final String userId;
+
+  const _UsernameChip({required this.userId});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return const SizedBox.shrink();
+        }
+
+        final data = snapshot.data!.data() as Map<String, dynamic>;
+        final nickname = data['nickname'] ?? 'User';
+
+        return Text(
+          nickname,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+        );
+      },
+    );
+  }
+}
+

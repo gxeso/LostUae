@@ -30,6 +30,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
   final locationController = TextEditingController();
   final descriptionController = TextEditingController();
   final phoneController = TextEditingController();
+  final rewardController = TextEditingController();
 
   File? selectedImage;
 
@@ -41,6 +42,10 @@ class _PostItemScreenState extends State<PostItemScreen> {
   String status = 'Lost';
   bool isLoading = false;
 
+  // 🔐 VERIFICATION
+  String verificationStatus = 'none';
+  bool verificationLoaded = false;
+
   final List<String> emirates = const [
     'Dubai',
     'Abu Dhabi',
@@ -51,12 +56,43 @@ class _PostItemScreenState extends State<PostItemScreen> {
     'Fujairah',
   ];
 
+  final RegExp _uaePhoneRegex = RegExp(r'^(5[0-9]{8})$');
+
+  int _countWords(String text) =>
+      text.trim().isEmpty ? 0 : text.trim().split(RegExp(r'\s+')).length;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVerificationStatus();
+  }
+
+  Future<void> _loadVerificationStatus() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      verificationStatus = snap.data()?['verificationStatus'] ?? 'none';
+    } catch (_) {
+      verificationStatus = 'none';
+    } finally {
+      verificationLoaded = true;
+      if (mounted) setState(() {});
+    }
+  }
+
   @override
   void dispose() {
     itemNameController.dispose();
     locationController.dispose();
     descriptionController.dispose();
     phoneController.dispose();
+    rewardController.dispose();
     super.dispose();
   }
 
@@ -90,17 +126,45 @@ class _PostItemScreenState extends State<PostItemScreen> {
     return await ref.getDownloadURL();
   }
 
-  /* ---------------- SUBMIT ITEM ---------------- */
+  /* ---------------- BLOCK DIALOG ---------------- */
+
+  void _showBlockedDialog() {
+    final message = verificationStatus == 'pending_review'
+        ? 'Your identity verification is under review.\n\nYou can post once it is approved.'
+        : 'You must verify your identity before posting items.';
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Posting Restricted'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /* ---------------- SUBMIT ---------------- */
 
   Future<void> _submitItem() async {
+    if (!verificationLoaded) return;
+
+    // 🚫 BLOCK
+    if (verificationStatus != 'verified') {
+      _showBlockedDialog();
+      return;
+    }
+
     if (isLoading) return;
     if (!_formKey.currentState!.validate()) return;
 
     if (pickedAddress == null || latitude == null || longitude == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a location on the map'),
-        ),
+        const SnackBar(content: Text('Please select a location on the map')),
       );
       return;
     }
@@ -116,6 +180,33 @@ class _PostItemScreenState extends State<PostItemScreen> {
       return;
     }
 
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Confirm Post'),
+        content: const Text(
+          'Are you sure you want to post this item?\n\n'
+          'Please double-check the details before continuing.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Post'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    await _submitItemInternal();
+  }
+
+  Future<void> _submitItemInternal() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
@@ -132,7 +223,12 @@ class _PostItemScreenState extends State<PostItemScreen> {
         'locationName': pickedAddress,
         'latitude': latitude,
         'longitude': longitude,
-        'contactPhone': phoneController.text.trim(),
+        'contactPhone': phoneController.text.trim().isEmpty
+            ? null
+            : '+971${phoneController.text.trim()}',
+        'rewardAed': status == 'Lost' && rewardController.text.trim().isNotEmpty
+            ? int.parse(rewardController.text.trim())
+            : null,
         'emirate': selectedEmirate,
         'userId': user.uid,
         'imageUrl': imageUrl,
@@ -140,8 +236,6 @@ class _PostItemScreenState extends State<PostItemScreen> {
         'isClaimed': false,
         'claimedAt': null,
       });
-
-      setState(() => isLoading = false);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -151,26 +245,12 @@ class _PostItemScreenState extends State<PostItemScreen> {
       );
 
       widget.onPostSuccess();
-    } on FirebaseException catch (e) {
-      setState(() => isLoading = false);
-
-      if (e.code == 'permission-denied') {
-        const waitMinutes = 10;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Posting limit reached. Please wait $waitMinutes minutes before posting again.',
-            ),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to post item. Please try again.'),
-          ),
-        );
-      }
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to post item')),
+      );
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -178,6 +258,10 @@ class _PostItemScreenState extends State<PostItemScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!verificationLoaded) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Form(
@@ -199,9 +283,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
                       : null,
                 ),
                 child: selectedImage == null
-                    ? const Center(
-                        child: Icon(Icons.add_a_photo, size: 42),
-                      )
+                    ? const Center(child: Icon(Icons.add_a_photo, size: 42))
                     : null,
               ),
             ),
@@ -222,8 +304,19 @@ class _PostItemScreenState extends State<PostItemScreen> {
 
             TextFormField(
               controller: itemNameController,
-              decoration: const InputDecoration(labelText: 'Item Name'),
-              validator: (v) => v!.trim().isEmpty ? 'Required' : null,
+              decoration: const InputDecoration(
+                labelText: 'Item Name',
+                helperText: 'Required · Max 20 words',
+              ),
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) {
+                  return 'Item name is required';
+                }
+                if (_countWords(v) > 20) {
+                  return 'Maximum 20 words allowed';
+                }
+                return null;
+              },
             ),
 
             const SizedBox(height: 16),
@@ -231,11 +324,54 @@ class _PostItemScreenState extends State<PostItemScreen> {
             TextFormField(
               controller: descriptionController,
               maxLines: 3,
-              decoration: const InputDecoration(labelText: 'Description'),
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                helperText: 'Required · Max 100 words',
+              ),
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) {
+                  return 'Description is required';
+                }
+                if (_countWords(v) > 100) {
+                  return 'Maximum 100 words allowed';
+                }
+                return null;
+              },
             ),
 
             const SizedBox(height: 16),
 
+            if (status == 'Lost')
+              TextFormField(
+                controller: rewardController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Reward (AED)',
+                  helperText: 'Optional',
+                ),
+              ),
+
+            const SizedBox(height: 16),
+
+            TextFormField(
+              controller: phoneController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Contact Phone',
+                prefixText: '+971 ',
+                helperText: 'Optional · 5XXXXXXXX',
+              ),
+              validator: (v) {
+                if (v == null || v.isEmpty) return null;
+                return _uaePhoneRegex.hasMatch(v)
+                    ? null
+                    : 'Invalid UAE phone number';
+              },
+            ),
+
+            const SizedBox(height: 20),
+
+            // 📍 LOCATION PICKER (RESTORED)
             ListTile(
               leading: const Icon(Icons.location_on_outlined),
               title: const Text('Pick exact location'),
@@ -280,17 +416,9 @@ class _PostItemScreenState extends State<PostItemScreen> {
                 prefixIcon: Icon(Icons.map),
               ),
               controller: TextEditingController(
-                text: selectedEmirate ??
-                    'Select location to detect emirate',
+                text:
+                    selectedEmirate ?? 'Select location to detect emirate',
               ),
-            ),
-
-            const SizedBox(height: 16),
-
-            TextFormField(
-              controller: phoneController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Contact Phone'),
             ),
 
             const SizedBox(height: 28),
