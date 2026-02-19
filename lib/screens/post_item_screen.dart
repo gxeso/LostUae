@@ -8,6 +8,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:profanity_filter/profanity_filter.dart';
+
 import 'map_picker_screen.dart';
 
 class PostItemScreen extends StatefulWidget {
@@ -32,6 +34,9 @@ class _PostItemScreenState extends State<PostItemScreen> {
   final phoneController = TextEditingController();
   final rewardController = TextEditingController();
 
+  // ✅ profanity library
+  final ProfanityFilter _profanityFilter = ProfanityFilter();
+
   File? selectedImage;
 
   double? latitude;
@@ -45,6 +50,9 @@ class _PostItemScreenState extends State<PostItemScreen> {
   // 🔐 VERIFICATION
   String verificationStatus = 'none';
   bool verificationLoaded = false;
+
+  // 🚫 VALIDATION (Description)
+  String? _descriptionError;
 
   final List<String> emirates = const [
     'Dubai',
@@ -60,6 +68,67 @@ class _PostItemScreenState extends State<PostItemScreen> {
 
   int _countWords(String text) =>
       text.trim().isEmpty ? 0 : text.trim().split(RegExp(r'\s+')).length;
+
+  // ✅ Link detection (safe)
+  bool _containsLink(String text) {
+    final lower = text.toLowerCase();
+
+    if (lower.contains('http://') ||
+        lower.contains('https://') ||
+        lower.contains('www.')) {
+      return true;
+    }
+
+    final domainRegex = RegExp(r'\b[a-z0-9-]+\.[a-z]{2,}\b');
+    return domainRegex.hasMatch(lower);
+  }
+
+  // ✅ Custom drug words (since this package version doesn't support addWords)
+  static const List<String> _drugWords = [
+    'coke',
+    'cocaine',
+    'heroin',
+    'weed',
+    'marijuana',
+    'hash',
+    'meth',
+    'mdma',
+    'ecstasy',
+    'lsd',
+  ];
+
+  bool _containsDrugWord(String text) {
+    final lower = text.toLowerCase();
+    for (final w in _drugWords) {
+      final re =
+          RegExp(r'\b' + RegExp.escape(w) + r'\b', caseSensitive: false);
+      if (re.hasMatch(lower)) return true;
+    }
+    return false;
+  }
+
+  bool _containsExplicitContent(String text) {
+    return _profanityFilter.hasProfanity(text) || _containsDrugWord(text);
+  }
+
+  // Live validator
+  void _validateDescription(String value) {
+    final v = value.trim();
+
+    String? err;
+    if (v.isEmpty) {
+      err = null; // required handled by validator
+    } else if (_containsLink(v)) {
+      err = 'Links are not allowed in the description.';
+    } else if (_containsExplicitContent(v)) {
+      err = 'No explicit or inappropriate words are allowed.';
+    } else {
+      err = null;
+    }
+
+    if (!mounted) return;
+    setState(() => _descriptionError = err);
+  }
 
   @override
   void initState() {
@@ -160,6 +229,12 @@ class _PostItemScreenState extends State<PostItemScreen> {
     }
 
     if (isLoading) return;
+
+    // Final content checks (blocks posting + shows red message)
+    final desc = descriptionController.text.trim();
+    _validateDescription(desc);
+    if (_descriptionError != null) return;
+
     if (!_formKey.currentState!.validate()) return;
 
     if (pickedAddress == null || latitude == null || longitude == null) {
@@ -324,16 +399,25 @@ class _PostItemScreenState extends State<PostItemScreen> {
             TextFormField(
               controller: descriptionController,
               maxLines: 3,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Description',
-                helperText: 'Required · Max 100 words',
+                helperText:
+                    'Required · Max 100 words · No links · No explicit words',
+                errorText: _descriptionError,
               ),
+              onChanged: _validateDescription,
               validator: (v) {
                 if (v == null || v.trim().isEmpty) {
                   return 'Description is required';
                 }
                 if (_countWords(v) > 100) {
                   return 'Maximum 100 words allowed';
+                }
+                if (_containsLink(v)) {
+                  return 'Links are not allowed in the description.';
+                }
+                if (_containsExplicitContent(v)) {
+                  return 'No explicit or inappropriate words are allowed.';
                 }
                 return null;
               },
@@ -371,7 +455,6 @@ class _PostItemScreenState extends State<PostItemScreen> {
 
             const SizedBox(height: 20),
 
-            // 📍 LOCATION PICKER (RESTORED)
             ListTile(
               leading: const Icon(Icons.location_on_outlined),
               title: const Text('Pick exact location'),
@@ -416,8 +499,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
                 prefixIcon: Icon(Icons.map),
               ),
               controller: TextEditingController(
-                text:
-                    selectedEmirate ?? 'Select location to detect emirate',
+                text: selectedEmirate ?? 'Select location to detect emirate',
               ),
             ),
 

@@ -736,6 +736,7 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.8"
+<<<<<<< HEAD
   pub_semver:
     dependency: transitive
     description:
@@ -760,6 +761,16 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.0"
+=======
+  profanity_filter:
+    dependency: "direct main"
+    description:
+      name: profanity_filter
+      sha256: afe466d42a2763a5b86849192bee3337de45a9566d5915a0fe4aa5f9cd2e8ac4
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.0"
+>>>>>>> 43f223b5c398230b68e27b963b7c5b3a9de4ce5e
   sanitize_html:
     dependency: transitive
     description:
