@@ -33,8 +33,8 @@ class _PostItemScreenState extends State<PostItemScreen> {
   final descriptionController = TextEditingController();
   final phoneController = TextEditingController();
   final rewardController = TextEditingController();
+  final emirateController = TextEditingController();
 
-  // ✅ profanity library
   final ProfanityFilter _profanityFilter = ProfanityFilter();
 
   File? selectedImage;
@@ -47,88 +47,63 @@ class _PostItemScreenState extends State<PostItemScreen> {
   String status = 'Lost';
   bool isLoading = false;
 
-  // 🔐 VERIFICATION
   String verificationStatus = 'none';
   bool verificationLoaded = false;
 
-  // 🚫 VALIDATION (Description)
   String? _descriptionError;
-
-  final List<String> emirates = const [
-    'Dubai',
-    'Abu Dhabi',
-    'Sharjah',
-    'Ajman',
-    'Umm Al Quwain',
-    'Ras Al Khaimah',
-    'Fujairah',
-  ];
+  String? _itemNameError;
 
   final RegExp _uaePhoneRegex = RegExp(r'^(5[0-9]{8})$');
 
-  int _countWords(String text) =>
-      text.trim().isEmpty ? 0 : text.trim().split(RegExp(r'\s+')).length;
+  /* ---------------- VALIDATION HELPERS ---------------- */
 
-  // ✅ Link detection (safe)
   bool _containsLink(String text) {
     final lower = text.toLowerCase();
-
     if (lower.contains('http://') ||
         lower.contains('https://') ||
-        lower.contains('www.')) {
-      return true;
-    }
+        lower.contains('www.')) return true;
 
     final domainRegex = RegExp(r'\b[a-z0-9-]+\.[a-z]{2,}\b');
     return domainRegex.hasMatch(lower);
   }
 
-  // ✅ Custom drug words (since this package version doesn't support addWords)
-  static const List<String> _drugWords = [
-    'coke',
-    'cocaine',
-    'heroin',
-    'weed',
-    'marijuana',
-    'hash',
-    'meth',
-    'mdma',
-    'ecstasy',
-    'lsd',
-  ];
-
-  bool _containsDrugWord(String text) {
-    final lower = text.toLowerCase();
-    for (final w in _drugWords) {
-      final re =
-          RegExp(r'\b' + RegExp.escape(w) + r'\b', caseSensitive: false);
-      if (re.hasMatch(lower)) return true;
-    }
-    return false;
-  }
-
   bool _containsExplicitContent(String text) {
-    return _profanityFilter.hasProfanity(text) || _containsDrugWord(text);
+    return _profanityFilter.hasProfanity(text);
   }
 
-  // Live validator
   void _validateDescription(String value) {
     final v = value.trim();
-
     String? err;
+
     if (v.isEmpty) {
-      err = null; // required handled by validator
-    } else if (_containsLink(v)) {
-      err = 'Links are not allowed in the description.';
-    } else if (_containsExplicitContent(v)) {
-      err = 'No explicit or inappropriate words are allowed.';
-    } else {
       err = null;
+    } else if (_containsLink(v)) {
+      err = 'Links are not allowed.';
+    } else if (_containsExplicitContent(v)) {
+      err = 'Inappropriate words detected.';
     }
 
-    if (!mounted) return;
-    setState(() => _descriptionError = err);
+    if (mounted) {
+      setState(() => _descriptionError = err);
+    }
   }
+
+  void _validateItemName(String value) {
+    final v = value.trim();
+    String? err;
+
+    if (v.isEmpty) {
+      err = null;
+    } else if (_containsExplicitContent(v)) {
+      err = 'Inappropriate words detected.';
+    }
+
+    if (mounted) {
+      setState(() => _itemNameError = err);
+    }
+  }
+
+  /* ---------------- INIT ---------------- */
 
   @override
   void initState() {
@@ -140,19 +115,15 @@ class _PostItemScreenState extends State<PostItemScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    try {
-      final snap = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
+    final snap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
 
-      verificationStatus = snap.data()?['verificationStatus'] ?? 'none';
-    } catch (_) {
-      verificationStatus = 'none';
-    } finally {
-      verificationLoaded = true;
-      if (mounted) setState(() {});
-    }
+    verificationStatus = snap.data()?['verificationStatus'] ?? 'none';
+    verificationLoaded = true;
+
+    if (mounted) setState(() {});
   }
 
   @override
@@ -162,10 +133,11 @@ class _PostItemScreenState extends State<PostItemScreen> {
     descriptionController.dispose();
     phoneController.dispose();
     rewardController.dispose();
+    emirateController.dispose();
     super.dispose();
   }
 
-  /* ---------------- IMAGE PICK ---------------- */
+  /* ---------------- IMAGE ---------------- */
 
   Future<void> _pickImage() async {
     final picked = await _picker.pickImage(
@@ -178,8 +150,6 @@ class _PostItemScreenState extends State<PostItemScreen> {
     }
   }
 
-  /* ---------------- IMAGE UPLOAD ---------------- */
-
   Future<String?> _uploadImage(String uid) async {
     if (selectedImage == null) return null;
 
@@ -187,81 +157,41 @@ class _PostItemScreenState extends State<PostItemScreen> {
         .ref()
         .child('items/$uid/${DateTime.now().millisecondsSinceEpoch}.jpg');
 
-    await ref.putFile(
-      selectedImage!,
-      SettableMetadata(contentType: 'image/jpeg'),
-    );
-
+    await ref.putFile(selectedImage!);
     return await ref.getDownloadURL();
   }
 
-  /* ---------------- BLOCK DIALOG ---------------- */
+  /* ---------------- CONFIRM POST ---------------- */
 
-  void _showBlockedDialog() {
-    final message = verificationStatus == 'pending_review'
-        ? 'Your identity verification is under review.\n\nYou can post once it is approved.'
-        : 'You must verify your identity before posting items.';
-
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Posting Restricted'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /* ---------------- SUBMIT ---------------- */
-
-  Future<void> _submitItem() async {
-    if (!verificationLoaded) return;
-
-    // 🚫 BLOCK
-    if (verificationStatus != 'verified') {
-      _showBlockedDialog();
-      return;
-    }
-
-    if (isLoading) return;
-
-    // Final content checks (blocks posting + shows red message)
-    final desc = descriptionController.text.trim();
-    _validateDescription(desc);
-    if (_descriptionError != null) return;
-
+  Future<void> _confirmPost() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (pickedAddress == null || latitude == null || longitude == null) {
+    if (latitude == null || longitude == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a location on the map')),
+        const SnackBar(content: Text('Please select a location')),
       );
       return;
     }
 
-    if (selectedEmirate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Unable to detect emirate. Please choose a valid UAE location.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    final confirmed = await showDialog<bool>(
+    final confirm = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (context) => AlertDialog(
         title: const Text('Confirm Post'),
-        content: const Text(
-          'Are you sure you want to post this item?\n\n'
-          'Please double-check the details before continuing.',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Status: $status'),
+            Text('Item: ${itemNameController.text.trim()}'),
+            Text('Emirate: ${selectedEmirate ?? "Unknown"}'),
+            if (rewardController.text.trim().isNotEmpty)
+              Text('Reward: AED ${rewardController.text.trim()}'),
+            const SizedBox(height: 10),
+            const Text(
+              'Are you sure you want to publish this post?',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -270,18 +200,29 @@ class _PostItemScreenState extends State<PostItemScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Post'),
+            child: const Text('Confirm'),
           ),
         ],
       ),
     );
 
-    if (confirmed != true) return;
-
-    await _submitItemInternal();
+    if (confirm == true) {
+      _submitItem();
+    }
   }
 
-  Future<void> _submitItemInternal() async {
+  /* ---------------- SUBMIT ---------------- */
+
+  Future<void> _submitItem() async {
+    if (!verificationLoaded) return;
+
+    if (verificationStatus != 'verified') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You must verify before posting.')),
+      );
+      return;
+    }
+
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
@@ -294,33 +235,24 @@ class _PostItemScreenState extends State<PostItemScreen> {
         'status': status,
         'itemName': itemNameController.text.trim(),
         'description': descriptionController.text.trim(),
-        'location': locationController.text.trim(),
         'locationName': pickedAddress,
         'latitude': latitude,
         'longitude': longitude,
         'contactPhone': phoneController.text.trim().isEmpty
             ? null
             : '+971${phoneController.text.trim()}',
-        'rewardAed': status == 'Lost' && rewardController.text.trim().isNotEmpty
-            ? int.parse(rewardController.text.trim())
-            : null,
+        'rewardAed': rewardController.text.trim().isEmpty
+            ? null
+            : int.parse(rewardController.text.trim()),
         'emirate': selectedEmirate,
         'userId': user.uid,
         'imageUrl': imageUrl,
         'createdAt': Timestamp.now(),
         'isClaimed': false,
-        'claimedAt': null,
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.green,
-          content: Text('Item posted successfully'),
-        ),
-      );
-
       widget.onPostSuccess();
-    } catch (_) {
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Failed to post item')),
       );
@@ -343,6 +275,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
         key: _formKey,
         child: ListView(
           children: [
+
             GestureDetector(
               onTap: _pickImage,
               child: Container(
@@ -379,16 +312,15 @@ class _PostItemScreenState extends State<PostItemScreen> {
 
             TextFormField(
               controller: itemNameController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Item Name',
-                helperText: 'Required · Max 20 words',
+                errorText: _itemNameError,
               ),
+              onChanged: _validateItemName,
               validator: (v) {
-                if (v == null || v.trim().isEmpty) {
-                  return 'Item name is required';
-                }
-                if (_countWords(v) > 20) {
-                  return 'Maximum 20 words allowed';
+                if (v == null || v.trim().isEmpty) return 'Required';
+                if (_containsExplicitContent(v)) {
+                  return 'Inappropriate words detected.';
                 }
                 return null;
               },
@@ -401,23 +333,14 @@ class _PostItemScreenState extends State<PostItemScreen> {
               maxLines: 3,
               decoration: InputDecoration(
                 labelText: 'Description',
-                helperText:
-                    'Required · Max 100 words · No links · No explicit words',
                 errorText: _descriptionError,
               ),
               onChanged: _validateDescription,
               validator: (v) {
-                if (v == null || v.trim().isEmpty) {
-                  return 'Description is required';
-                }
-                if (_countWords(v) > 100) {
-                  return 'Maximum 100 words allowed';
-                }
-                if (_containsLink(v)) {
-                  return 'Links are not allowed in the description.';
-                }
+                if (v == null || v.trim().isEmpty) return 'Required';
+                if (_containsLink(v)) return 'Links are not allowed.';
                 if (_containsExplicitContent(v)) {
-                  return 'No explicit or inappropriate words are allowed.';
+                  return 'Inappropriate words detected.';
                 }
                 return null;
               },
@@ -425,47 +348,14 @@ class _PostItemScreenState extends State<PostItemScreen> {
 
             const SizedBox(height: 16),
 
-            if (status == 'Lost')
-              TextFormField(
-                controller: rewardController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Reward (AED)',
-                  helperText: 'Optional',
-                ),
-              ),
-
-            const SizedBox(height: 16),
-
-            TextFormField(
-              controller: phoneController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Contact Phone',
-                prefixText: '+971 ',
-                helperText: 'Optional · 5XXXXXXXX',
-              ),
-              validator: (v) {
-                if (v == null || v.isEmpty) return null;
-                return _uaePhoneRegex.hasMatch(v)
-                    ? null
-                    : 'Invalid UAE phone number';
-              },
-            ),
-
-            const SizedBox(height: 20),
-
             ListTile(
-              leading: const Icon(Icons.location_on_outlined),
-              title: const Text('Pick exact location'),
+              leading: const Icon(Icons.location_on),
+              title: const Text('Pick Location'),
               subtitle: Text(
                 locationController.text.isEmpty
                     ? 'Tap to choose on map'
                     : locationController.text,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
-              trailing: const Icon(Icons.chevron_right),
               onTap: () async {
                 final result = await Navigator.push(
                   context,
@@ -479,12 +369,11 @@ class _PostItemScreenState extends State<PostItemScreen> {
                     pickedAddress = result['name'];
                     latitude = result['lat'];
                     longitude = result['lng'];
-                    locationController.text = result['name'];
+                    selectedEmirate = result['emirate'];
 
-                    if (result['emirate'] != null &&
-                        emirates.contains(result['emirate'])) {
-                      selectedEmirate = result['emirate'];
-                    }
+                    locationController.text = pickedAddress!;
+                    emirateController.text =
+                        selectedEmirate ?? 'Unknown Emirate';
                   });
                 }
               },
@@ -493,14 +382,37 @@ class _PostItemScreenState extends State<PostItemScreen> {
             const SizedBox(height: 12),
 
             TextFormField(
+              controller: emirateController,
               readOnly: true,
               decoration: const InputDecoration(
                 labelText: 'Detected Emirate',
                 prefixIcon: Icon(Icons.map),
               ),
-              controller: TextEditingController(
-                text: selectedEmirate ?? 'Select location to detect emirate',
+            ),
+
+            const SizedBox(height: 16),
+
+            TextFormField(
+              controller: rewardController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Reward (AED) - Optional',
+                prefixIcon: Icon(Icons.monetization_on),
               ),
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) return null;
+
+                final parsed = int.tryParse(v.trim());
+                if (parsed == null || parsed < 0) {
+                  return 'Enter valid amount';
+                }
+
+                if (parsed > 50000) {
+                  return 'Reward too high';
+                }
+
+                return null;
+              },
             ),
 
             const SizedBox(height: 28),
@@ -508,7 +420,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
             SizedBox(
               height: 48,
               child: ElevatedButton(
-                onPressed: isLoading ? null : _submitItem,
+                onPressed: isLoading ? null : _confirmPost,
                 child: isLoading
                     ? const CircularProgressIndicator(color: Colors.white)
                     : const Text('Post Item'),

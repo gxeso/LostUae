@@ -364,10 +364,10 @@ packages:
     dependency: transitive
     description:
       name: google_maps_flutter_ios
-      sha256: "38f0a9ee858b0de3a5105e7efe200f154eea8397eb0c36bea6b3810429fbc0e4"
+      sha256: a2e3c7ad2392ea65d6775704716d0aa3c3d226cb984fd0a688bca40f6be1a451
       url: "https://pub.dev"
     source: hosted
-    version: "2.17.3"
+    version: "2.17.4"
   google_maps_flutter_platform_interface:
     dependency: transitive
     description:
@@ -736,7 +736,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.8"
-<<<<<<< HEAD
+  profanity_filter:
+    dependency: "direct main"
+    description:
+      name: profanity_filter
+      sha256: afe466d42a2763a5b86849192bee3337de45a9566d5915a0fe4aa5f9cd2e8ac4
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.0"
   pub_semver:
     dependency: transitive
     description:
@@ -761,16 +768,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.0"
-=======
-  profanity_filter:
-    dependency: "direct main"
-    description:
-      name: profanity_filter
-      sha256: afe466d42a2763a5b86849192bee3337de45a9566d5915a0fe4aa5f9cd2e8ac4
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.0"
->>>>>>> 43f223b5c398230b68e27b963b7c5b3a9de4ce5e
   sanitize_html:
     dependency: transitive
     description:
