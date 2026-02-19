@@ -8,6 +8,7 @@ import 'feed_screen.dart';
 import 'post_item_screen.dart';
 import 'profile_screen.dart';
 import 'setting_screen.dart';
+import 'my_posts_screen.dart';
 import 'chat system/chat_list_screen.dart';
 
 import '../CustomWidgets/notification_bell.dart';
@@ -36,19 +37,17 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
 
     _pages = [
-      const FeedScreen(),            // 0
-      const ChatListScreen(),        // 1
-      PostItemScreen(                // 2
+      const FeedScreen(), // 0
+      const ChatListScreen(), // 1
+      const MyPostsScreen(), // 2
+      PostItemScreen( // 3
         onPostSuccess: () {
           setState(() => _currentIndex = 0);
         },
       ),
-      ProfileScreen(                 // 3
+      ProfileScreen( // 4
         toggleTheme: widget.toggleTheme,
         isDarkMode: widget.isDarkMode,
-        onCreatePost: () {
-          setState(() => _currentIndex = 2);
-        },
       ),
     ];
   }
@@ -70,14 +69,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
       case 2:
         return AppBar(
-          title: const Text('Post Lost / Found Item'),
-          automaticallyImplyLeading: false,
+          title: const Text('My Posts'),
         );
 
       case 3:
         return AppBar(
+          title: const Text('Post Lost / Found Item'),
+        );
+
+      case 4:
+        return AppBar(
           title: const Text('Profile'),
-          automaticallyImplyLeading: false,
           actions: [
             IconButton(
               onPressed: widget.toggleTheme,
@@ -108,25 +110,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: _buildAppBar(),
-
-      // 🔑 THIS IS THE MAGIC (NO MORE DISAPPEARING)
       body: IndexedStack(
         index: _currentIndex,
         children: _pages,
       ),
-
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
           setState(() => _currentIndex = index);
         },
-
         type: BottomNavigationBarType.fixed,
         backgroundColor: theme.scaffoldBackgroundColor,
         selectedItemColor: theme.colorScheme.primary,
         unselectedItemColor:
             theme.textTheme.bodySmall?.color?.withOpacity(0.6),
-
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home),
@@ -135,6 +132,10 @@ class _HomeScreenState extends State<HomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.chat_bubble_outline),
             label: 'Chats',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.list_alt),
+            label: 'My Posts',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.add_circle_outline),

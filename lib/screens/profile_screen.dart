@@ -1,22 +1,16 @@
-// © 2026 Project LostUAE
-// Joint work – All rights reserved
-// Unauthorized use prohibited
-
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import 'my_posts_screen.dart';
 import 'login_screen.dart';
+import 'qr system/qr_code_profile_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
-  final VoidCallback onCreatePost;
   final VoidCallback toggleTheme;
   final bool isDarkMode;
 
   const ProfileScreen({
     super.key,
-    required this.onCreatePost,
     required this.toggleTheme,
     required this.isDarkMode,
   });
@@ -70,7 +64,7 @@ class ProfileScreen extends StatelessWidget {
               children: [
                 const SizedBox(height: 24),
 
-                /* ================= AVATAR ================= */
+                // ================= AVATAR =================
 
                 Stack(
                   children: [
@@ -87,21 +81,17 @@ class ProfileScreen extends StatelessWidget {
                             Theme.of(context).colorScheme.primary,
                       ),
                     ),
-
                     if (isVerified)
                       Positioned(
                         bottom: 0,
                         right: 0,
-                        child: Tooltip(
-                          message: 'Verified account',
-                          child: CircleAvatar(
-                            radius: 14,
-                            backgroundColor: Colors.blue,
-                            child: const Icon(
-                              Icons.verified,
-                              size: 16,
-                              color: Colors.white,
-                            ),
+                        child: CircleAvatar(
+                          radius: 14,
+                          backgroundColor: Colors.blue,
+                          child: const Icon(
+                            Icons.verified,
+                            size: 16,
+                            color: Colors.white,
                           ),
                         ),
                       ),
@@ -125,16 +115,13 @@ class ProfileScreen extends StatelessWidget {
                   isPending: isPending,
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
 
-                /* ================= PENDING BANNER ================= */
-
-                if (isPending)
-                  _PendingVerificationBanner(),
+                if (isPending) _PendingVerificationBanner(),
 
                 const SizedBox(height: 24),
 
-                /* ================= STATS ================= */
+                // ================= STATS =================
 
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -160,54 +147,7 @@ class ProfileScreen extends StatelessWidget {
 
                 const SizedBox(height: 32),
 
-                /* ================= ACTIONS ================= */
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => MyPostsScreen(
-                                onCreatePost: onCreatePost,
-                              ),
-                            ),
-                          );
-                        },
-                        child: const Text('My Posts'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed:
-                            isVerified ? onCreatePost : null,
-                        child: const Text('New Post'),
-                      ),
-                    ),
-                  ],
-                ),
-
-                if (!isVerified)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: Text(
-                      isPending
-                          ? 'You can post once verification is approved.'
-                          : 'Verify your identity to create posts.',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: Colors.orange),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-
-                const SizedBox(height: 32),
-
-                /* ================= INFO ================= */
+                // ================= ACCOUNT INFO =================
 
                 Align(
                   alignment: Alignment.centerLeft,
@@ -223,9 +163,9 @@ class ProfileScreen extends StatelessWidget {
                   child: Column(
                     children: [
                       _InfoRow(label: 'Email', value: email),
-                      _Divider(),
+                      const Divider(height: 1),
                       _InfoRow(label: 'Phone', value: phone),
-                      _Divider(),
+                      const Divider(height: 1),
                       _InfoRow(label: 'User ID', value: user.uid),
                     ],
                   ),
@@ -233,7 +173,28 @@ class ProfileScreen extends StatelessWidget {
 
                 const SizedBox(height: 32),
 
-                /* ================= LOGOUT ================= */
+                // ================= QR CODE =================
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.qr_code_2),
+                    label: const Text('My QR Code'),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const QRCodeProfileScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // ================= LOGOUT =================
 
                 SizedBox(
                   width: double.infinity,
@@ -268,9 +229,7 @@ class ProfileScreen extends StatelessWidget {
   }
 }
 
-/* ========================================================================== */
-/*                               STATUS WIDGETS                               */
-/* ========================================================================== */
+/* ================= HELPER WIDGETS ================= */
 
 class _VerificationStatusChip extends StatelessWidget {
   final bool isVerified;
@@ -283,32 +242,26 @@ class _VerificationStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color color;
-    String text;
-    IconData icon;
-
     if (isVerified) {
-      color = Colors.green;
-      text = 'Verified';
-      icon = Icons.verified;
-    } else if (isPending) {
-      color = Colors.orange;
-      text = 'Verification Pending';
-      icon = Icons.hourglass_top;
-    } else {
-      color = Colors.redAccent;
-      text = 'Unverified';
-      icon = Icons.info_outline;
+      return const Chip(
+        label: Text('Verified'),
+        backgroundColor: Colors.green,
+        labelStyle: TextStyle(color: Colors.white),
+      );
     }
 
-    return Chip(
-      avatar: Icon(icon, size: 16, color: Colors.white),
-      label: Text(text),
-      backgroundColor: color,
-      labelStyle: const TextStyle(
-        color: Colors.white,
-        fontWeight: FontWeight.w600,
-      ),
+    if (isPending) {
+      return const Chip(
+        label: Text('Verification Pending'),
+        backgroundColor: Colors.orange,
+        labelStyle: TextStyle(color: Colors.white),
+      );
+    }
+
+    return const Chip(
+      label: Text('Unverified'),
+      backgroundColor: Colors.redAccent,
+      labelStyle: TextStyle(color: Colors.white),
     );
   }
 }
@@ -324,17 +277,14 @@ class _PendingVerificationBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.orange),
       ),
-      child: Row(
-        children: const [
+      child: const Row(
+        children: [
           Icon(Icons.hourglass_top, color: Colors.orange),
           SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Your identity is under review. '
-              'You’ll be notified once verification is complete.',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-              ),
+              'Your identity is under review.',
+              style: TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -342,10 +292,6 @@ class _PendingVerificationBanner extends StatelessWidget {
     );
   }
 }
-
-/* ========================================================================== */
-/*                               UI HELPERS                                   */
-/* ========================================================================== */
 
 class _StatItem extends StatelessWidget {
   final String label;
@@ -368,10 +314,7 @@ class _StatItem extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
+        Text(label),
       ],
     );
   }
@@ -392,10 +335,7 @@ class _InfoRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
         children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          Text(label),
           const Spacer(),
           Expanded(
             flex: 2,
@@ -407,17 +347,6 @@ class _InfoRow extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _Divider extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Divider(
-      height: 1,
-      thickness: 0.6,
-      color: Theme.of(context).dividerColor,
     );
   }
 }

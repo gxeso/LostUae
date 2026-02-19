@@ -1,20 +1,22 @@
 /**
- * Cloud Functions – STABLE VERSION
- * - Create user document on Auth signup (Email / Google)
- * - Similarity matching
- * - Post rate limit + notification
- * - Reset post limits
- * - Cleanup claimed items
+ * LostUAE Cloud Functions – Production Version
+ * ---------------------------------------------
+ * ✔ Create user document on Auth signup
+ * ✔ Real similarity matching
+ * ✔ Post rate limit + notification
+ * ✔ Daily cleanup
+ * ✔ Match notifications
  */
 
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const { calculateSimilarity } = require("./similarity");
 
 admin.initializeApp();
 const db = admin.firestore();
 
 /* =====================================================
-   👤 CREATE USER DOC ON AUTH SIGNUP (EMAIL + GOOGLE)
+   👤 CREATE USER DOC ON AUTH SIGNUP
    ===================================================== */
 exports.onAuthUserCreated = functions.auth.user().onCreate(async (user) => {
   const userRef = db.collection("users").doc(user.uid);
@@ -36,7 +38,7 @@ exports.onAuthUserCreated = functions.auth.user().onCreate(async (user) => {
 });
 
 /* =====================================================
-   🔗 SIMILARITY MATCHING
+   🔗 REAL SIMILARITY MATCHING
    ===================================================== */
 exports.onItemCreated = functions.firestore
   .document("items/{itemId}")
@@ -44,20 +46,27 @@ exports.onItemCreated = functions.firestore
     const newItem = snap.data();
     const newItemId = context.params.itemId;
 
-    if (!newItem?.description) return;
+    if (!newItem?.description || !newItem?.status) return;
 
-    const items = await db.collection("items").get();
+    const itemsSnapshot = await db.collection("items").get();
     const batch = db.batch();
 
-    items.forEach((doc) => {
-      if (doc.id === newItemId) return;
+    for (const doc of itemsSnapshot.docs) {
+      if (doc.id === newItemId) continue;
+
       const other = doc.data();
-      if (!other?.description) return;
-      if (other.status === newItem.status) return;
+      if (!other?.description) continue;
 
-      const score = 0.5; // placeholder – your similarity fn here
+      // Only match lost ↔ found
+      if (other.status === newItem.status) continue;
 
-      if (score < 0.3) return;
+      const score = calculateSimilarity(
+        newItem.description,
+        other.description
+      );
+
+      // 🔥 Adjust threshold here
+      if (score < 0.35) continue;
 
       const sourceId = newItemId < doc.id ? newItemId : doc.id;
       const targetId = newItemId < doc.id ? doc.id : newItemId;
@@ -67,12 +76,12 @@ exports.onItemCreated = functions.firestore
         {
           sourceId,
           targetId,
-          score,
+          score: Number(score.toFixed(3)),
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true }
       );
-    });
+    }
 
     await batch.commit();
   });
@@ -117,7 +126,7 @@ exports.onItemCreatedUpdateUser = functions.firestore
   });
 
 /* =====================================================
-   🧹 CLEANUP CLAIMED ITEMS (DAILY)
+   🧹 CLEANUP CLAIMED ITEMS (7 DAYS OLD)
    ===================================================== */
 exports.cleanupClaimedItems = functions.pubsub
   .schedule("every 24 hours")
@@ -134,12 +143,12 @@ exports.cleanupClaimedItems = functions.pubsub
 
     const batch = db.batch();
     snap.forEach((doc) => batch.delete(doc.ref));
+
     await batch.commit();
   });
-  
 
 /* =====================================================
-   🔔 NOTIFY USERS WHEN A MATCH IS CREATED
+   🔔 NOTIFY USERS WHEN MATCH IS CREATED
    ===================================================== */
 exports.onMatchCreated = functions.firestore
   .document("matched/{matchId}")
@@ -163,7 +172,6 @@ exports.onMatchCreated = functions.firestore
 
     const batch = db.batch();
 
-    // 🔔 Notify source user
     batch.set(db.collection("notifications").doc(), {
       userId: sourceItem.userId,
       type: "match",
@@ -175,7 +183,6 @@ exports.onMatchCreated = functions.firestore
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // 🔔 Notify target user
     batch.set(db.collection("notifications").doc(), {
       userId: targetItem.userId,
       type: "match",

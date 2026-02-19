@@ -1,16 +1,16 @@
 /**
- * Cloud-Function-safe similarity model
- * -----------------------------------
- * ✔ No dotenv
- * ✔ No Firebase init
- * ✔ No listeners
- * ✔ No process.exit
+ * LostUAE Similarity Model
+ * ------------------------
  * ✔ Pure function
- * ✔ Works on Node 18
+ * ✔ Cloud Function safe
+ * ✔ Node 18 compatible
  */
 
 /**
- * Normalize text: lowercase, remove punctuation
+ * Normalize text:
+ * - Lowercase
+ * - Remove punctuation
+ * - Tokenize
  */
 function normalize(text) {
   return text
@@ -21,8 +21,8 @@ function normalize(text) {
 }
 
 /**
- * Calculate similarity score between two descriptions
- * Returns a number between 0 and 1
+ * Calculate similarity using Jaccard index
+ * Returns value between 0 and 1
  */
 function calculateSimilarity(descriptionA, descriptionB) {
   if (
@@ -48,14 +48,12 @@ function calculateSimilarity(descriptionA, descriptionB) {
     }
   }
 
-  // Jaccard-like similarity
   const unionSize = new Set([...tokensA, ...tokensB]).size;
   const score = common / unionSize;
 
-  // Clamp to [0, 1]
   return Math.max(0, Math.min(score, 1));
 }
 
 module.exports = {
-  calculateSimilarity
+  calculateSimilarity,
 };

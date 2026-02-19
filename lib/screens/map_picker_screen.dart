@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class MapPickerScreen extends StatefulWidget {
   const MapPickerScreen({super.key});
@@ -21,10 +22,29 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   String? address;
   String? emirate;
 
+  bool _locationPermissionGranted = false;
+
   final CameraPosition _initialPosition = const CameraPosition(
     target: LatLng(25.2048, 55.2708), // Dubai
     zoom: 11,
   );
+
+  @override
+  void initState() {
+    super.initState();
+    _requestLocationPermission();
+  }
+
+  /* ================= REQUEST PERMISSION ================= */
+
+  Future<void> _requestLocationPermission() async {
+    final status = await Permission.location.request();
+    if (status.isGranted) {
+      setState(() {
+        _locationPermissionGranted = true;
+      });
+    }
+  }
 
   /* ================= SEARCH LOCATION ================= */
 
@@ -115,8 +135,9 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             initialCameraPosition: _initialPosition,
             onMapCreated: (controller) => _mapController = controller,
             onTap: _onTap,
-            myLocationEnabled: true,
-            myLocationButtonEnabled: true,
+            myLocationEnabled: _locationPermissionGranted,
+            myLocationButtonEnabled: _locationPermissionGranted,
+            zoomControlsEnabled: false,
             markers: selectedLatLng == null
                 ? {}
                 : {
@@ -133,8 +154,8 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             left: 16,
             right: 16,
             child: Material(
-              elevation: 4,
-              borderRadius: BorderRadius.circular(12),
+              elevation: 6,
+              borderRadius: BorderRadius.circular(14),
               child: TextField(
                 controller: _searchController,
                 textInputAction: TextInputAction.search,
@@ -160,9 +181,12 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
               left: 16,
               right: 16,
               child: Card(
-                elevation: 4,
+                elevation: 6,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(14),
                   child: Text(
                     '$address\n${emirate ?? 'Unknown emirate'}',
                     textAlign: TextAlign.center,
@@ -178,9 +202,14 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             left: 16,
             right: 16,
             child: SizedBox(
-              height: 48,
+              height: 50,
               child: ElevatedButton(
                 onPressed: selectedLatLng == null ? null : _confirm,
+                style: ElevatedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
                 child: const Text('Confirm Location'),
               ),
             ),
