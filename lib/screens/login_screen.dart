@@ -89,90 +89,107 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   /* ================= GOOGLE LOGIN ================= */
-  Future<void> _handleGoogleSignIn() async {
-    try {
-      setState(() => isLoading = true);
+Future<void> _handleGoogleSignIn() async {
+  try {
+    setState(() => isLoading = true);
 
-      final googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) return;
+    final GoogleSignIn googleSignIn = GoogleSignIn.instance;
 
-      final googleAuth = await googleUser.authentication;
+    // Required in v7+
+    await googleSignIn.initialize(
+      serverClientId: null,
+    );
 
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
+    await googleSignIn.signOut();
 
-      final userCredential =
-          await FirebaseAuth.instance.signInWithCredential(credential);
+    final GoogleSignInAccount account =
+        await googleSignIn.authenticate();
 
-      final user = userCredential.user;
-      if (user == null) return;
+    final GoogleSignInAuthentication googleAuth =
+        await account.authentication;
 
-      final userRef =
-          FirebaseFirestore.instance.collection('users').doc(user.uid);
+    final OAuthCredential credential =
+        GoogleAuthProvider.credential(
+      idToken: googleAuth.idToken,
+    );
 
-      final snap = await userRef.get();
-      if (!snap.exists) {
-        await userRef.set({
-          'uid': user.uid,
-          'email': user.email ?? '',
-          'createdAt': Timestamp.now(),
-          'postCount': 0,
-          'lastPostAt': Timestamp.fromMillisecondsSinceEpoch(0),
-          'hasAcceptedTerms': false,
-          'termsAcceptedAt': null,
-        });
-      }
+    final userCredential =
+        await FirebaseAuth.instance.signInWithCredential(credential);
 
-      final data = (await userRef.get()).data();
+    final user = userCredential.user;
+    if (user == null) return;
 
-      final nickname = data?['nickname'] as String?;
-      final phone = data?['phone'] as String?;
+    final userRef =
+        FirebaseFirestore.instance.collection('users').doc(user.uid);
 
-      final needsProfile =
-          nickname == null ||
-          nickname.trim().isEmpty ||
-          phone == null ||
-          phone.trim().isEmpty;
+    final snap = await userRef.get();
 
-      if (needsProfile) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const CompleteProfileScreen(),
-          ),
-        );
-        return;
-      }
+    if (!snap.exists) {
+      await userRef.set({
+        'uid': user.uid,
+        'email': user.email ?? '',
+        'nickname': '',
+        'phone': '',
+        'createdAt': Timestamp.now(),
+        'postCount': 0,
+        'lastPostAt': Timestamp.fromMillisecondsSinceEpoch(0),
+        'hasAcceptedTerms': false,
+        'termsAcceptedAt': null,
+        'role': 'guest',
+        'accountStatus': 'active',   // ✅ default — changed to 'investigated' after 3+ reports
+        'pendingReportCount': 0,     // ✅ incremented by ReportService on each report
+      });
+    }
 
-      final hasAcceptedTerms = data?['hasAcceptedTerms'] == true;
-      if (!hasAcceptedTerms) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const TermsScreen()),
-        );
-        return;
-      }
+    final data = (await userRef.get()).data();
 
-      Navigator.pushAndRemoveUntil(
+    final nickname = data?['nickname'] as String?;
+    final phone = data?['phone'] as String?;
+
+    final needsProfile =
+        nickname == null ||
+        nickname.trim().isEmpty ||
+        phone == null ||
+        phone.trim().isEmpty;
+
+    if (needsProfile) {
+      Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => HomeScreen(
-            toggleTheme: widget.toggleTheme,
-            isDarkMode: widget.isDarkMode,
-          ),
+          builder: (_) => const CompleteProfileScreen(),
         ),
-        (_) => false,
       );
-    } catch (e) {
-      debugPrint('🔥 GOOGLE LOGIN ERROR: $e');
-      _showError('Google sign-in failed');
-    } finally {
-      setState(() => isLoading = false);
+      return;
     }
-  }
 
+    final hasAcceptedTerms = data?['hasAcceptedTerms'] == true;
+
+    if (!hasAcceptedTerms) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const TermsScreen()),
+      );
+      return;
+    }
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => HomeScreen(
+          toggleTheme: widget.toggleTheme,
+          isDarkMode: widget.isDarkMode,
+        ),
+      ),
+      (_) => false,
+    );
+
+  } catch (e) {
+    debugPrint('🔥 GOOGLE LOGIN ERROR: $e');
+    _showError('Google sign-in failed');
+  } finally {
+    setState(() => isLoading = false);
+  }
+}
   /* ================= TERMS CHECK ================= */
   Future<void> _checkTermsAndNavigate(User user) async {
     final doc = await FirebaseFirestore.instance

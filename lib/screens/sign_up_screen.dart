@@ -102,46 +102,63 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   setState(() => isLoading = true);
 
-  try {
-    // 🔍 UNIQUENESS CHECKS
-    if (await _exists('nickname', nickname)) {
-      _showError('Nickname already taken');
-      return;
-    }
-    if (await _exists('email', email)) {
-      _showError('Email already in use');
-      return;
-    }
-    if (await _exists('phone', phone)) {
-      _showError('Phone number already in use');
-      return;
-    }
+  UserCredential? credential;
 
-    // 🔐 AUTH
-    final credential =
-        await FirebaseAuth.instance.createUserWithEmailAndPassword(
+  try {
+    // 🔥 STEP 1: CREATE AUTH USER FIRST
+    credential = await FirebaseAuth.instance
+        .createUserWithEmailAndPassword(
       email: email,
       password: password,
     );
 
-    final uid = credential.user!.uid;
+    final user = credential.user;
+    if (user == null) {
+      _showError('Account creation failed');
+      return;
+    }
 
-    // 👤 FIRESTORE PROFILE
+    final uid = user.uid;
+
+    // 🔥 STEP 2: NOW USER IS AUTHENTICATED → QUERY ALLOWED
+    final nicknameExists = await FirebaseFirestore.instance
+        .collection('users')
+        .where('nickname', isEqualTo: nickname)
+        .limit(1)
+        .get();
+
+    if (nicknameExists.docs.isNotEmpty) {
+      await user.delete();
+      _showError('Nickname already taken');
+      return;
+    }
+
+    final phoneExists = await FirebaseFirestore.instance
+        .collection('users')
+        .where('phone', isEqualTo: phone)
+        .limit(1)
+        .get();
+
+    if (phoneExists.docs.isNotEmpty) {
+      await user.delete();
+      _showError('Phone already in use');
+      return;
+    }
+
+    // 🔥 STEP 3: CREATE FIRESTORE PROFILE
     await FirebaseFirestore.instance.collection('users').doc(uid).set({
       'uid': uid,
       'nickname': nickname,
       'email': email,
       'phone': phone,
-
-      // ACCESS CONTROL
       'role': 'guest',
       'verificationStatus': 'none',
       'hasAcceptedTerms': false,
-
-      // META
       'createdAt': Timestamp.now(),
       'postCount': 0,
       'lastPostAt': Timestamp.now(),
+      'accountStatus': 'active',   // ✅ default — changed to 'investigated' after 3+ reports
+      'pendingReportCount': 0,     // ✅ incremented by ReportService on each report
     });
 
     if (!mounted) return;
@@ -154,13 +171,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
 
     Navigator.pop(context);
+
+  } on FirebaseAuthException catch (e) {
+
+    if (e.code == 'email-already-in-use') {
+      _showError('Email already in use');
+    } else if (e.code == 'weak-password') {
+      _showError('Weak password');
+    } else {
+      _showError('Account creation failed');
+    }
+
   } catch (e) {
-    _showError('Account creation failed. Try again.');
+    _showError('Something went wrong');
   } finally {
     if (mounted) setState(() => isLoading = false);
   }
 }
-
 
   /* =========================
      ❌ ERROR UI

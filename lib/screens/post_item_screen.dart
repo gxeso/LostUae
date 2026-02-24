@@ -48,6 +48,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
   bool isLoading = false;
 
   String verificationStatus = 'none';
+  String accountStatus = '';
   bool verificationLoaded = false;
 
   String? _descriptionError;
@@ -121,6 +122,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
         .get();
 
     verificationStatus = snap.data()?['verificationStatus'] ?? 'none';
+    accountStatus = snap.data()?['accountStatus'] ?? '';
     verificationLoaded = true;
 
     if (mounted) setState(() {});
@@ -213,222 +215,262 @@ class _PostItemScreenState extends State<PostItemScreen> {
 
   /* ---------------- SUBMIT ---------------- */
 
-  Future<void> _submitItem() async {
-    if (!verificationLoaded) return;
+ Future<void> _submitItem() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
 
-    if (verificationStatus != 'verified') {
+  setState(() => isLoading = true);
+
+  try {
+    // 🔥 ALWAYS fetch fresh status from Firestore
+    final snap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    final currentVerification = snap.data()?['verificationStatus'];
+    final currentAccount = snap.data()?['accountStatus'] ?? '';
+
+    // Block investigated users
+    if (currentAccount == 'investigated') {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You must verify before posting.')),
+        const SnackBar(
+          content: Text('Your account has been flagged. You cannot post items.'),
+          backgroundColor: Colors.deepOrange,
+        ),
       );
+      setState(() => isLoading = false);
       return;
     }
 
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    setState(() => isLoading = true);
-
-    try {
-      final imageUrl = await _uploadImage(user.uid);
-
-      await FirebaseFirestore.instance.collection('items').add({
-        'status': status,
-        'itemName': itemNameController.text.trim(),
-        'description': descriptionController.text.trim(),
-        'locationName': pickedAddress,
-        'latitude': latitude,
-        'longitude': longitude,
-        'contactPhone': phoneController.text.trim().isEmpty
-            ? null
-            : '+971${phoneController.text.trim()}',
-        'rewardAed': rewardController.text.trim().isEmpty
-            ? null
-            : int.parse(rewardController.text.trim()),
-        'emirate': selectedEmirate,
-        'userId': user.uid,
-        'imageUrl': imageUrl,
-        'createdAt': Timestamp.now(),
-        'isClaimed': false,
-      });
-
-      widget.onPostSuccess();
-    } catch (e) {
+    if (currentVerification != 'verified') {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to post item')),
+        const SnackBar(content: Text('You must verify before posting.')),
       );
-    } finally {
-      if (mounted) setState(() => isLoading = false);
+      setState(() => isLoading = false);
+      return;
     }
-  }
 
+    final imageUrl = await _uploadImage(user.uid);
+
+    await FirebaseFirestore.instance.collection('items').add({
+      'status': status,
+      'itemName': itemNameController.text.trim(),
+      'description': descriptionController.text.trim(),
+      'locationName': pickedAddress,
+      'latitude': latitude,
+      'longitude': longitude,
+      'contactPhone': phoneController.text.trim().isEmpty
+          ? null
+          : '+971${phoneController.text.trim()}',
+      'rewardAed': rewardController.text.trim().isEmpty
+          ? null
+          : int.parse(rewardController.text.trim()),
+      'emirate': selectedEmirate,
+      'userId': user.uid,
+      'imageUrl': imageUrl,
+      'createdAt': Timestamp.now(),
+      'isClaimed': false,
+    });
+
+    widget.onPostSuccess();
+  } catch (e) {
+    print("POST ERROR: $e");
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Failed to post item')),
+    );
+  } finally {
+    if (mounted) setState(() => isLoading = false);
+  }
+}
   /* ---------------- UI ---------------- */
 
-  @override
-  Widget build(BuildContext context) {
-    if (!verificationLoaded) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Form(
-        key: _formKey,
-        child: ListView(
-          children: [
-
-            GestureDetector(
-              onTap: _pickImage,
-              child: Container(
-                height: 190,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(14),
-                  image: selectedImage != null
-                      ? DecorationImage(
-                          image: FileImage(selectedImage!),
-                          fit: BoxFit.cover,
-                        )
-                      : null,
-                ),
-                child: selectedImage == null
-                    ? const Center(child: Icon(Icons.add_a_photo, size: 42))
-                    : null,
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            DropdownButtonFormField<String>(
-              value: status,
-              decoration: const InputDecoration(labelText: 'Status'),
-              items: const [
-                DropdownMenuItem(value: 'Lost', child: Text('Lost')),
-                DropdownMenuItem(value: 'Found', child: Text('Found')),
-              ],
-              onChanged: (v) => setState(() => status = v!),
-            ),
-
-            const SizedBox(height: 16),
-
-            TextFormField(
-              controller: itemNameController,
-              decoration: InputDecoration(
-                labelText: 'Item Name',
-                errorText: _itemNameError,
-              ),
-              onChanged: _validateItemName,
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'Required';
-                if (_containsExplicitContent(v)) {
-                  return 'Inappropriate words detected.';
-                }
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 16),
-
-            TextFormField(
-              controller: descriptionController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                labelText: 'Description',
-                errorText: _descriptionError,
-              ),
-              onChanged: _validateDescription,
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'Required';
-                if (_containsLink(v)) return 'Links are not allowed.';
-                if (_containsExplicitContent(v)) {
-                  return 'Inappropriate words detected.';
-                }
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 16),
-
-            ListTile(
-              leading: const Icon(Icons.location_on),
-              title: const Text('Pick Location'),
-              subtitle: Text(
-                locationController.text.isEmpty
-                    ? 'Tap to choose on map'
-                    : locationController.text,
-              ),
-              onTap: () async {
-                final result = await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const MapPickerScreen(),
-                  ),
-                );
-
-                if (result != null) {
-                  setState(() {
-                    pickedAddress = result['name'];
-                    latitude = result['lat'];
-                    longitude = result['lng'];
-                    selectedEmirate = result['emirate'];
-
-                    locationController.text = pickedAddress!;
-                    emirateController.text =
-                        selectedEmirate ?? 'Unknown Emirate';
-                  });
-                }
-              },
-            ),
-
-            const SizedBox(height: 12),
-
-            TextFormField(
-              controller: emirateController,
-              readOnly: true,
-              decoration: const InputDecoration(
-                labelText: 'Detected Emirate',
-                prefixIcon: Icon(Icons.map),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            TextFormField(
-              controller: rewardController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Reward (AED) - Optional',
-                prefixIcon: Icon(Icons.monetization_on),
-              ),
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return null;
-
-                final parsed = int.tryParse(v.trim());
-                if (parsed == null || parsed < 0) {
-                  return 'Enter valid amount';
-                }
-
-                if (parsed > 50000) {
-                  return 'Reward too high';
-                }
-
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 28),
-
-            SizedBox(
-              height: 48,
-              child: ElevatedButton(
-                onPressed: isLoading ? null : _confirmPost,
-                child: isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('Post Item'),
-              ),
-            ),
-          ],
-        ),
-      ),
+@override
+Widget build(BuildContext context) {
+  if (!verificationLoaded) {
+    return const Center(
+      child: CircularProgressIndicator(),
     );
   }
+
+  return SafeArea(
+    child: Material(
+      color: Colors.transparent,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            children: [
+
+              GestureDetector(
+                onTap: _pickImage,
+                child: Container(
+                  height: 190,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(14),
+                    image: selectedImage != null
+                        ? DecorationImage(
+                            image: FileImage(selectedImage!),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
+                  ),
+                  child: selectedImage == null
+                      ? const Center(
+                          child: Icon(Icons.add_a_photo, size: 42))
+                      : null,
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              DropdownButtonFormField<String>(
+                value: status,
+                decoration: const InputDecoration(labelText: 'Status'),
+                items: const [
+                  DropdownMenuItem(value: 'Lost', child: Text('Lost')),
+                  DropdownMenuItem(value: 'Found', child: Text('Found')),
+                ],
+                onChanged: (v) {
+                  setState(() {
+                    status = v!;
+                    // Reward is only for Lost items — clear it when switching to Found
+                    if (status == 'Found') {
+                      rewardController.clear();
+                    }
+                  });
+                },
+              ),
+
+              const SizedBox(height: 16),
+
+              TextFormField(
+                controller: itemNameController,
+                decoration: InputDecoration(
+                  labelText: 'Item Name',
+                  errorText: _itemNameError,
+                ),
+                onChanged: _validateItemName,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Required';
+                  if (_containsExplicitContent(v)) {
+                    return 'Inappropriate words detected.';
+                  }
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 16),
+
+              TextFormField(
+                controller: descriptionController,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  labelText: 'Description',
+                  errorText: _descriptionError,
+                ),
+                onChanged: _validateDescription,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Required';
+                  if (_containsLink(v)) return 'Links are not allowed.';
+                  if (_containsExplicitContent(v)) {
+                    return 'Inappropriate words detected.';
+                  }
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 16),
+
+              ListTile(
+                leading: const Icon(Icons.location_on),
+                title: const Text('Pick Location'),
+                subtitle: Text(
+                  locationController.text.isEmpty
+                      ? 'Tap to choose on map'
+                      : locationController.text,
+                ),
+                onTap: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const MapPickerScreen(),
+                    ),
+                  );
+
+                  if (result != null) {
+                    setState(() {
+                      pickedAddress = result['name'];
+                      latitude = result['lat'];
+                      longitude = result['lng'];
+                      selectedEmirate = result['emirate'];
+
+                      locationController.text = pickedAddress!;
+                      emirateController.text =
+                          selectedEmirate ?? 'Unknown Emirate';
+                    });
+                  }
+                },
+              ),
+
+              const SizedBox(height: 12),
+
+              TextFormField(
+                controller: emirateController,
+                readOnly: true,
+                decoration: const InputDecoration(
+                  labelText: 'Detected Emirate',
+                  prefixIcon: Icon(Icons.map),
+                ),
+              ),
+
+              // Reward only applies to Lost items
+              if (status == 'Lost') ...[
+                const SizedBox(height: 16),
+
+                TextFormField(
+                  controller: rewardController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Reward (AED) - Optional',
+                    prefixIcon: Icon(Icons.monetization_on),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return null;
+
+                    final parsed = int.tryParse(v.trim());
+                    if (parsed == null || parsed < 0) {
+                      return 'Enter valid amount';
+                    }
+
+                    if (parsed > 50000) {
+                      return 'Reward too high';
+                    }
+
+                    return null;
+                  },
+                ),
+              ],
+
+              const SizedBox(height: 28),
+
+              SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: isLoading ? null : _confirmPost,
+                  child: isLoading
+                      ? const CircularProgressIndicator(
+                          color: Colors.white)
+                      : const Text('Post Item'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
 }

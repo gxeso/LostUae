@@ -2,10 +2,11 @@
  * LostUAE Cloud Functions – Production Version
  * ---------------------------------------------
  * ✔ Create user document on Auth signup
- * ✔ Real similarity matching
+ * ✔ Real similarity matching (hybrid Jaccard model)
  * ✔ Post rate limit + notification
- * ✔ Daily cleanup
+ * ✔ Daily cleanup of claimed items
  * ✔ Match notifications
+ * ✔ Account investigation notification
  */
 
 const functions = require("firebase-functions");
@@ -48,7 +49,21 @@ exports.onItemCreated = functions.firestore
 
     if (!newItem?.description || !newItem?.status) return;
 
-    const itemsSnapshot = await db.collection("items").get();
+    // Only fetch items with the OPPOSITE status (Lost ↔ Found).
+    // This avoids a full collection scan and cuts read costs significantly.
+    const oppositeStatus = newItem.status === "Lost" ? "Found" : "Lost";
+
+    let itemsSnapshot;
+    try {
+      itemsSnapshot = await db
+        .collection("items")
+        .where("status", "==", oppositeStatus)
+        .get();
+    } catch (err) {
+      console.error("onItemCreated: failed to fetch opposite items", err);
+      return;
+    }
+
     const batch = db.batch();
 
     for (const doc of itemsSnapshot.docs) {
@@ -57,16 +72,13 @@ exports.onItemCreated = functions.firestore
       const other = doc.data();
       if (!other?.description) continue;
 
-      // Only match lost ↔ found
-      if (other.status === newItem.status) continue;
-
       const score = calculateSimilarity(
         newItem.description,
         other.description
       );
 
-      // 🔥 Adjust threshold here
-      if (score < 0.35) continue;
+      // Threshold: 0.30 — calibrated for the hybrid stopword-aware model.
+      if (score < 0.30) continue;
 
       const sourceId = newItemId < doc.id ? newItemId : doc.id;
       const targetId = newItemId < doc.id ? doc.id : newItemId;
@@ -83,7 +95,11 @@ exports.onItemCreated = functions.firestore
       );
     }
 
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch (err) {
+      console.error("onItemCreated: batch commit failed", err);
+    }
   });
 
 /* =====================================================
@@ -126,25 +142,105 @@ exports.onItemCreatedUpdateUser = functions.firestore
   });
 
 /* =====================================================
-   🧹 CLEANUP CLAIMED ITEMS (7 DAYS OLD)
+   🧹 CLEANUP CLAIMED ITEMS (48 HOURS AFTER CLAIM)
+   Runs every 24 hours.
+   TTL = 48 h — once an item is claimed/returned it no
+   longer needs to appear in the feed.
+   Handles legacy items that have no claimedAt field by
+   falling back to createdAt so they are never orphaned.
    ===================================================== */
 exports.cleanupClaimedItems = functions.pubsub
   .schedule("every 24 hours")
   .onRun(async () => {
-    const cutoff = admin.firestore.Timestamp.fromMillis(
-      Date.now() - 7 * 24 * 60 * 60 * 1000
-    );
+    // 48 hours — short enough to keep the feed clean,
+    // long enough for the owner to see the resolution.
+    const CLAIMED_TTL_MS = 48 * 60 * 60 * 1000;
+    const cutoffMillis = Date.now() - CLAIMED_TTL_MS;
+    const cutoff = admin.firestore.Timestamp.fromMillis(cutoffMillis);
 
-    const snap = await db
-      .collection("items")
-      .where("isClaimed", "==", true)
-      .where("claimedAt", "<=", cutoff)
-      .get();
+    let snap;
+    try {
+      // Fetch ALL claimed items in one read.
+      // We filter by timestamp in code so we can handle
+      // legacy docs that are missing the claimedAt field.
+      snap = await db
+        .collection("items")
+        .where("isClaimed", "==", true)
+        .get();
+    } catch (err) {
+      console.error("cleanupClaimedItems: failed to fetch claimed items", err);
+      return;
+    }
 
     const batch = db.batch();
-    snap.forEach((doc) => batch.delete(doc.ref));
+    let deleteCount = 0;
 
-    await batch.commit();
+    for (const doc of snap.docs) {
+      const data = doc.data();
+
+      // Prefer claimedAt; fall back to createdAt for items
+      // claimed before this field was introduced.
+      const referenceTs = data.claimedAt ?? data.createdAt;
+
+      if (!referenceTs) continue; // no timestamp at all — skip
+
+      if (referenceTs.toMillis() <= cutoffMillis) {
+        batch.delete(doc.ref);
+        deleteCount++;
+      }
+    }
+
+    try {
+      await batch.commit();
+      console.log(
+        `cleanupClaimedItems: deleted ${deleteCount} claimed item(s) older than 48 h`
+      );
+    } catch (err) {
+      console.error("cleanupClaimedItems: batch commit failed", err);
+    }
+  });
+
+/* =====================================================
+   🚨 NOTIFY USER WHEN ACCOUNT IS INVESTIGATED
+   Fires whenever a user document is updated.
+   Only acts when accountStatus transitions TO 'investigated'.
+   ===================================================== */
+exports.onUserStatusInvestigated = functions.firestore
+  .document("users/{userId}")
+  .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+
+    // Only act on the specific transition → 'investigated'
+    if (
+      before.accountStatus === "investigated" ||
+      after.accountStatus !== "investigated"
+    ) {
+      return;
+    }
+
+    const userId = context.params.userId;
+
+    try {
+      await db.collection("notifications").add({
+        userId,
+        type: "account_investigated",
+        title: "⚠️ Account Under Investigation",
+        message:
+          "Your account has been flagged for malpractice. " +
+          "You can no longer chat or post items until the investigation is resolved. " +
+          "Please contact support if you believe this is a mistake.",
+        isRead: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      console.log(`Investigation notification sent to user: ${userId}`);
+    } catch (err) {
+      console.error(
+        `onUserStatusInvestigated: failed to notify user ${userId}`,
+        err
+      );
+    }
   });
 
 /* =====================================================

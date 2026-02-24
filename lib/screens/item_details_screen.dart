@@ -10,6 +10,8 @@ import 'chat system/chat_screen.dart';
 import 'chat system/chat_service.dart';
 import 'utils/chat_utils.dart';
 import 'edit_item_screen.dart';
+import '../services/report_service.dart';
+import '../utils/profanity_utils.dart';
 
 class ItemDetailsScreen extends StatefulWidget {
   final String itemId;
@@ -102,6 +104,18 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
         return Scaffold(
           appBar: AppBar(
             title: const Text('Item Details'),
+            actions: [
+              if (!isOwner)
+                IconButton(
+                  icon: const Icon(Icons.flag, color: Colors.red),
+                  tooltip: 'Report',
+                  onPressed: () => _showReportDialog(
+                    context,
+                    widget.itemId,
+                    ownerId,
+                  ),
+                ),
+            ],
           ),
           body: ListView(
             padding: const EdgeInsets.all(24),
@@ -223,6 +237,21 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                     icon: const Icon(Icons.chat_bubble_outline),
                     label: const Text('Chat with owner'),
                     onPressed: () async {
+                      // Block investigated users from chatting
+                      final allowed = await ReportService.canChat(currentUser.uid);
+                      if (!allowed) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Your account has been flagged. You cannot chat.',
+                            ),
+                            backgroundColor: Colors.deepOrange,
+                          ),
+                        );
+                        return;
+                      }
+
                       final caseId = buildCaseId(
                         widget.itemId,
                         currentUser.uid,
@@ -244,7 +273,10 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => ChatScreen(caseId: caseId),
+                          builder: (_) => ChatScreen(
+                            caseId: caseId,
+                            otherUserId: ownerId,
+                          ),
                         ),
                       );
                     },
@@ -341,6 +373,17 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
     if (diff.inHours < 24) return '${diff.inHours} hours ago';
     return '${diff.inDays} days ago';
   }
+
+  void _showReportDialog(BuildContext context, String itemId, String ownerId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => _ReportForm(itemId: itemId, ownerId: ownerId),
+    );
+  }
 }
 
 /* ================= POSTED BY USER ================= */
@@ -399,7 +442,196 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
+/* ================= REPORT FORM ================= */
 
+class _ReportForm extends StatefulWidget {
+  final String itemId;
+  final String ownerId;
+
+  const _ReportForm({
+    required this.itemId,
+    required this.ownerId,
+  });
+
+  @override
+  State<_ReportForm> createState() => _ReportFormState();
+}
+
+class _ReportFormState extends State<_ReportForm> {
+  final _formKey = GlobalKey<FormState>();
+  final _descriptionController = TextEditingController();
+  String _selectedReportType = 'Spam';
+  bool _isSubmitting = false;
+
+  final List<String> _reportTypes = [
+    'Spam',
+    'Inappropriate Content',
+    'Fake/Scam',
+    'Harassment',
+    'Other',
+  ];
+
+  @override
+  void dispose() {
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+        left: 24,
+        right: 24,
+        top: 24,
+      ),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.flag, color: Colors.red),
+                const SizedBox(width: 8),
+                const Text(
+                  'Report Item',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Report Type',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              value: _selectedReportType,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              items: _reportTypes.map((type) {
+                return DropdownMenuItem(
+                  value: type,
+                  child: Text(type),
+                );
+              }).toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _selectedReportType = value;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Description',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _descriptionController,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                hintText: 'Please describe the issue (min 10 characters)',
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Description is required';
+                }
+                if (value.trim().length < 10) {
+                  return 'Description must be at least 10 characters';
+                }
+                if (ProfanityUtils.hasProfanity(value)) {
+                  return 'Description contains inappropriate language';
+                }
+                if (ProfanityUtils.hasLinks(value)) {
+                  return 'Links are not allowed';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: _isSubmitting ? null : _submitReport,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                ),
+                child: _isSubmitting
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text('Submit Report'),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submitReport() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      final success = await ReportService.submitReport(
+        itemId: widget.itemId,
+        ownerId: widget.ownerId,
+        reportType: _selectedReportType,
+        description: _descriptionController.text.trim(),
+      );
+
+      if (!mounted) return;
+
+      if (success) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Report submitted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to submit report. You may have already reported this item.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+}
 
 /* ========================================================================== */
 /*                               SIMILAR ITEMS                                */

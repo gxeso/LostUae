@@ -33,20 +33,26 @@ class _SplashScreenState extends State<SplashScreen> {
 
     final user = FirebaseAuth.instance.currentUser;
 
+    // 🔥 NOT LOGGED IN
     if (user == null) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => LoginScreen(
-            toggleTheme: widget.toggleTheme,
-            isDarkMode: widget.isDarkMode,
-          ),
-        ),
-      );
+      _goToLogin();
       return;
     }
 
-    // 🔥 NOW AUTH IS READY → handle deep link
+    // 🔥 VERY IMPORTANT: CHECK IF FIRESTORE PROFILE EXISTS
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    if (!userDoc.exists) {
+      // Ghost session detected
+      await FirebaseAuth.instance.signOut();
+      _goToLogin();
+      return;
+    }
+
+    // 🔥 Deep link handling (chat)
     final initialRoute =
         WidgetsBinding.instance.platformDispatcher.defaultRouteName;
 
@@ -68,6 +74,7 @@ class _SplashScreenState extends State<SplashScreen> {
         if (!doc.exists) {
           await chatDoc.set({
             'users': [user.uid, targetUserId],
+            'isPinned': false, // ✅ REQUIRED for orderBy('isPinned') in chat list
             'lastMessage': '',
             'lastMessageTime': FieldValue.serverTimestamp(),
           });
@@ -89,6 +96,18 @@ class _SplashScreenState extends State<SplashScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => HomeScreen(
+          toggleTheme: widget.toggleTheme,
+          isDarkMode: widget.isDarkMode,
+        ),
+      ),
+    );
+  }
+
+  void _goToLogin() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LoginScreen(
           toggleTheme: widget.toggleTheme,
           isDarkMode: widget.isDarkMode,
         ),

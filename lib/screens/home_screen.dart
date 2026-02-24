@@ -39,7 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _pages = [
       const FeedScreen(), // 0
       const ChatListScreen(), // 1
-      const MyPostsScreen(), // 2
+      MyPostsScreen(onSwitchToPost: () => setState(() => _currentIndex = 3)), // 2
       PostItemScreen( // 3
         onPostSuccess: () {
           setState(() => _currentIndex = 0);

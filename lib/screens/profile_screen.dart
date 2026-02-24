@@ -47,6 +47,9 @@ class ProfileScreen extends StatelessWidget {
 
           final verificationStatus =
               data['verificationStatus'] ?? 'none';
+          final accountStatus = data['accountStatus'] ?? '';
+
+          final bool isInvestigated = accountStatus == 'investigated';
 
           final bool isVerified =
               verificationStatus == 'approved' ||
@@ -113,11 +116,13 @@ class ProfileScreen extends StatelessWidget {
                 _VerificationStatusChip(
                   isVerified: isVerified,
                   isPending: isPending,
+                  isInvestigated: isInvestigated,
                 ),
 
                 const SizedBox(height: 24),
 
-                if (isPending) _PendingVerificationBanner(),
+                if (isInvestigated) _InvestigatedBanner(),
+                if (isPending && !isInvestigated) _PendingVerificationBanner(),
 
                 const SizedBox(height: 24),
 
@@ -234,14 +239,26 @@ class ProfileScreen extends StatelessWidget {
 class _VerificationStatusChip extends StatelessWidget {
   final bool isVerified;
   final bool isPending;
+  final bool isInvestigated;
 
   const _VerificationStatusChip({
     required this.isVerified,
     required this.isPending,
+    this.isInvestigated = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Investigated takes highest priority
+    if (isInvestigated) {
+      return const Chip(
+        avatar: Icon(Icons.warning_amber_rounded, color: Colors.white, size: 16),
+        label: Text('Investigated'),
+        backgroundColor: Colors.deepOrange,
+        labelStyle: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+      );
+    }
+
     if (isVerified) {
       return const Chip(
         label: Text('Verified'),
@@ -262,6 +279,36 @@ class _VerificationStatusChip extends StatelessWidget {
       label: Text('Unverified'),
       backgroundColor: Colors.redAccent,
       labelStyle: TextStyle(color: Colors.white),
+    );
+  }
+}
+
+class _InvestigatedBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.deepOrange.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.deepOrange),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.gavel, color: Colors.deepOrange),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Your account has been flagged. Posting and chatting are disabled.',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.deepOrange,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -24,6 +24,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   bool isDarkMode = false;
+
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _sub;
 
@@ -41,16 +42,25 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _initDeepLinks() async {
-    // App opened from terminated state
-    final uri = await _appLinks.getInitialAppLink();
-    if (uri != null) {
-      _handleUri(uri);
-    }
+    try {
+      // ✅ FIX: correct method name
+      final Uri? uri = await _appLinks.getInitialLink();
+      if (uri != null) {
+        _handleUri(uri);
+      }
 
-    // App opened from background
-    _sub = _appLinks.uriLinkStream.listen((uri) {
-      _handleUri(uri);
-    });
+      // Listen for background / foreground links
+      _sub = _appLinks.uriLinkStream.listen(
+        (Uri uri) {
+          _handleUri(uri);
+        },
+        onError: (err) {
+          debugPrint("Deep link error: $err");
+        },
+      );
+    } catch (e) {
+      debugPrint("Deep link init error: $e");
+    }
   }
 
   void _handleUri(Uri uri) {
