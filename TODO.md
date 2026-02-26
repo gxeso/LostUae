@@ -1,11 +1,20 @@
-# LostUAE Firebase Functions – Fix & Enhancement Plan
+# Color Blind Mode – Implementation Checklist
 
-## Tasks
+## Steps
 
-- [x] Analyze all relevant files (index.js, similarity.js, item_timeout.js, firestore.rules, report_service.dart)
-- [x] Step 1: Upgrade `functions/similarity.js` — stopwords + stemming + bigrams + weighted hybrid score
-- [x] Step 2: Fix `functions/index.js` — efficient item query, threshold 0.30, add `onUserStatusInvestigated` notification function
-- [x] Step 3: Delete `functions/item_timeout.js` — dead broken code, not imported anywhere
-- [x] Step 4: Verified all changes are consistent with Firestore rules and Flutter notification reader
+- [x] 1. Edit `lib/main.dart`
+  - [x] 1a. Add top-level `ValueNotifier<bool> colorBlindModeNotifier`
+  - [x] 1b. Load `'colorBlindMode'` from SharedPreferences in `_loadLargeTextSetting()`
+  - [x] 1c. Wrap `build()` return with `ValueListenableBuilder` + conditional `ColorFiltered`
 
-## ✅ COMPLETE
+- [x] 2. Edit `lib/screens/accessibility_settings_screen.dart`
+  - [x] 2a. Import `../main.dart` for `colorBlindModeNotifier`
+  - [x] 2b. Add `_colorBlindMode` state variable
+  - [x] 2c. Load `'colorBlindMode'` in `_loadSettings()`
+  - [x] 2d. Add `_onColorBlindModeChanged()` handler
+  - [x] 2e. Append `Divider` + `SwitchListTile` for Color Blind Mode
+
+- [ ] 3. Verify
+  - [ ] Toggle ON → Protanopia filter applied globally
+  - [ ] Toggle OFF → app returns to normal
+  - [ ] Kill & relaunch → setting persists

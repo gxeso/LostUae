@@ -44,6 +44,9 @@ dependencies:
   path_provider: ^2.1.2
   app_links: ^7.0.0
   profanity_filter: ^2.0.0
+  flutter_tts: ^4.2.0
+  shared_preferences: ^2.3.0
+  
   
 
 

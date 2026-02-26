@@ -265,10 +265,9 @@ Future<void> _handleGoogleSignIn() async {
           children: [
             const SizedBox(height: 32),
 
-            const Text(
+            Text(
               'Welcome Back',
-              style: TextStyle(
-                fontSize: 28,
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -282,21 +281,31 @@ Future<void> _handleGoogleSignIn() async {
 
             const SizedBox(height: 40),
 
-            TextField(
-              controller: emailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Email',
+            Semantics(
+              label: 'Email text field',
+              textField: true,
+              child: TextField(
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  hintText: 'Enter your email address',
+                ),
               ),
             ),
 
             const SizedBox(height: 20),
 
-            TextField(
-              controller: passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Password',
+            Semantics(
+              label: 'Password text field',
+              textField: true,
+              child: TextField(
+                controller: passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Password',
+                  hintText: 'Enter your password',
+                ),
               ),
             ),
 
@@ -317,31 +326,39 @@ Future<void> _handleGoogleSignIn() async {
 
             const SizedBox(height: 24),
 
-            SizedBox(
-              height: 48,
-              child: ElevatedButton(
-                onPressed: isLoading ? null : _handleEmailLogin,
-                child: isLoading
-                    ? const SizedBox(
-                        height: 22,
-                        width: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('Login'),
+            Semantics(
+              label: isLoading ? 'Logging in, please wait' : 'Login to your account',
+              button: true,
+              child: SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: isLoading ? null : _handleEmailLogin,
+                  child: isLoading
+                      ? const SizedBox(
+                          height: 22,
+                          width: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Login'),
+                ),
               ),
             ),
 
             const SizedBox(height: 20),
 
-            SizedBox(
-              height: 48,
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.g_mobiledata, size: 28),
-                label: const Text('Continue with Google'),
-                onPressed: isLoading ? null : _handleGoogleSignIn,
+            Semantics(
+              label: 'Continue with Google',
+              button: true,
+              child: SizedBox(
+                height: 48,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.g_mobiledata, size: 28),
+                  label: const Text('Continue with Google'),
+                  onPressed: isLoading ? null : _handleGoogleSignIn,
+                ),
               ),
             ),
 
@@ -351,21 +368,25 @@ Future<void> _handleGoogleSignIn() async {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Text("Don't have an account? "),
-                GestureDetector(
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => SignUpScreen(
-                        toggleTheme: widget.toggleTheme,
-                        isDarkMode: widget.isDarkMode,
+                Semantics(
+                  label: 'Sign up for a new account',
+                  button: true,
+                  child: GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => SignUpScreen(
+                          toggleTheme: widget.toggleTheme,
+                          isDarkMode: widget.isDarkMode,
+                        ),
                       ),
                     ),
-                  ),
-                  child: Text(
-                    'Sign up',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontWeight: FontWeight.bold,
+                    child: Text(
+                      'Sign up',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),

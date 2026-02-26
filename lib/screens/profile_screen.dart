@@ -69,44 +69,47 @@ class ProfileScreen extends StatelessWidget {
 
                 // ================= AVATAR =================
 
-                Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 48,
-                      backgroundColor: Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withOpacity(0.15),
-                      child: Icon(
-                        Icons.person,
-                        size: 48,
-                        color:
-                            Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                    if (isVerified)
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: CircleAvatar(
-                          radius: 14,
-                          backgroundColor: Colors.blue,
-                          child: const Icon(
-                            Icons.verified,
-                            size: 16,
-                            color: Colors.white,
-                          ),
+                Semantics(
+                  label: 'Profile avatar for $nickname',
+                  image: true,
+                  child: Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 48,
+                        backgroundColor: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withOpacity(0.15),
+                        child: Icon(
+                          Icons.person,
+                          size: 48,
+                          color:
+                              Theme.of(context).colorScheme.primary,
                         ),
                       ),
-                  ],
+                      if (isVerified)
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: CircleAvatar(
+                            radius: 14,
+                            backgroundColor: Colors.blue,
+                            child: const Icon(
+                              Icons.verified,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
 
                 const SizedBox(height: 12),
 
                 Text(
                   nickname,
-                  style: const TextStyle(
-                    fontSize: 22,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -180,20 +183,24 @@ class ProfileScreen extends StatelessWidget {
 
                 // ================= QR CODE =================
 
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.qr_code_2),
-                    label: const Text('My QR Code'),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const QRCodeProfileScreen(),
-                        ),
-                      );
-                    },
+                Semantics(
+                  label: 'View my QR code',
+                  button: true,
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.qr_code_2),
+                      label: const Text('My QR Code'),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const QRCodeProfileScreen(),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
 
@@ -201,26 +208,54 @@ class ProfileScreen extends StatelessWidget {
 
                 // ================= LOGOUT =================
 
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Logout'),
-                    onPressed: () async {
-                      await FirebaseAuth.instance.signOut();
-
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => LoginScreen(
-                            toggleTheme: toggleTheme,
-                            isDarkMode: isDarkMode,
+                Semantics(
+                  label: 'Logout from account',
+                  button: true,
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.logout),
+                      label: const Text('Logout'),
+                      onPressed: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Logout'),
+                            content: const Text(
+                              'Are you sure you want to logout from your account?',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.pop(ctx, false),
+                                child: const Text('Cancel'),
+                              ),
+                              ElevatedButton(
+                                onPressed: () =>
+                                    Navigator.pop(ctx, true),
+                                child: const Text('Logout'),
+                              ),
+                            ],
                           ),
-                        ),
-                        (route) => false,
-                      );
-                    },
+                        );
+                        if (confirm == true) {
+                          await FirebaseAuth.instance.signOut();
+
+                          if (!context.mounted) return;
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => LoginScreen(
+                                toggleTheme: toggleTheme,
+                                isDarkMode: isDarkMode,
+                              ),
+                            ),
+                            (route) => false,
+                          );
+                        }
+                      },
+                    ),
                   ),
                 ),
 
@@ -355,8 +390,7 @@ class _StatItem extends StatelessWidget {
       children: [
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 18,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.bold,
           ),
         ),

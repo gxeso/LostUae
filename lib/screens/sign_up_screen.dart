@@ -217,9 +217,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 24),
-              const Text(
+              Text(
                 'Join LostUAE',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -228,61 +230,93 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
               const SizedBox(height: 40),
 
-              TextField(
-                controller: nicknameController,
-                decoration: const InputDecoration(
-                  labelText: 'Nickname',
-                  helperText: 'Unique · 3–15 letters or numbers',
+              Semantics(
+                label: 'Nickname text field',
+                textField: true,
+                child: TextField(
+                  controller: nicknameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Nickname',
+                    hintText: 'Choose a unique username (3–15 characters)',
+                    helperText: 'Unique · 3–15 letters or numbers',
+                  ),
                 ),
               ),
 
               const SizedBox(height: 20),
 
-              TextField(
-                controller: emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
+              Semantics(
+                label: 'Email text field',
+                textField: true,
+                child: TextField(
+                  controller: emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    hintText: 'Enter your email address',
+                  ),
                 ),
               ),
 
               const SizedBox(height: 20),
 
-              TextField(
-                controller: phoneController,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Phone Number',
-                  helperText: 'UAE only (05xxxxxxxx)',
+              Semantics(
+                label: 'Phone Number text field',
+                textField: true,
+                child: TextField(
+                  controller: phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone Number',
+                    hintText: 'Enter UAE mobile number (05XXXXXXXX)',
+                    helperText: 'UAE only (05xxxxxxxx)',
+                  ),
                 ),
               ),
 
               const SizedBox(height: 20),
 
-              TextField(
-                controller: passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'Password'),
+              Semantics(
+                label: 'Password text field',
+                textField: true,
+                child: TextField(
+                  controller: passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    hintText: 'Create a strong password (letters and numbers)',
+                  ),
+                ),
               ),
 
               const SizedBox(height: 20),
 
-              TextField(
-                controller: confirmPasswordController,
-                obscureText: true,
-                decoration:
-                    const InputDecoration(labelText: 'Confirm Password'),
+              Semantics(
+                label: 'Confirm Password text field',
+                textField: true,
+                child: TextField(
+                  controller: confirmPasswordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Confirm Password',
+                    hintText: 'Re-enter your password',
+                  ),
+                ),
               ),
 
               const SizedBox(height: 32),
 
-              SizedBox(
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: isLoading ? null : _handleSignUp,
-                  child: isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('Create Account'),
+              Semantics(
+                label: isLoading ? 'Creating account, please wait' : 'Create new account',
+                button: true,
+                child: SizedBox(
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: isLoading ? null : _handleSignUp,
+                    child: isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text('Create Account'),
+                  ),
                 ),
               ),
             ],

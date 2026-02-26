@@ -9,6 +9,7 @@ import 'change_password_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'delete_account_screen.dart';
 import 'passport_verification_screen.dart';
+import 'accessibility_settings_screen.dart';
 
 
 class SettingsScreen extends StatelessWidget {
@@ -35,19 +36,27 @@ class SettingsScreen extends StatelessWidget {
           _item(context, Icons.privacy_tip, 'Privacy Policy', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()))),
           _item(context, Icons.delete_forever, 'Delete Account', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DeleteAccountScreen()))),
           _item(
-  context,
-  Icons.verified_user,
-  'Verify Identity',
-  () => Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => const PassportVerificationScreen(),
-    ),
-  ),
-),
-
-
-
+            context,
+            Icons.verified_user,
+            'Verify Identity',
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const PassportVerificationScreen(),
+              ),
+            ),
+          ),
+          _item(
+            context,
+            Icons.accessibility_new,
+            'Accessibility',
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const AccessibilitySettingsScreen(),
+              ),
+            ),
+          ),
         ],
       ),
     );

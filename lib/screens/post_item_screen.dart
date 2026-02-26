@@ -303,24 +303,31 @@ Widget build(BuildContext context) {
           child: ListView(
             children: [
 
-              GestureDetector(
-                onTap: _pickImage,
-                child: Container(
-                  height: 190,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(14),
-                    image: selectedImage != null
-                        ? DecorationImage(
-                            image: FileImage(selectedImage!),
-                            fit: BoxFit.cover,
-                          )
+              Semantics(
+                label: selectedImage == null
+                    ? 'Upload item photo. Tap to select from gallery'
+                    : 'Selected item photo. Tap to change',
+                button: true,
+                image: selectedImage != null,
+                child: GestureDetector(
+                  onTap: _pickImage,
+                  child: Container(
+                    height: 190,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(14),
+                      image: selectedImage != null
+                          ? DecorationImage(
+                              image: FileImage(selectedImage!),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
+                    ),
+                    child: selectedImage == null
+                        ? const Center(
+                            child: Icon(Icons.add_a_photo, size: 42))
                         : null,
                   ),
-                  child: selectedImage == null
-                      ? const Center(
-                          child: Icon(Icons.add_a_photo, size: 42))
-                      : null,
                 ),
               ),
 
@@ -346,83 +353,109 @@ Widget build(BuildContext context) {
 
               const SizedBox(height: 16),
 
-              TextFormField(
-                controller: itemNameController,
-                decoration: InputDecoration(
-                  labelText: 'Item Name',
-                  errorText: _itemNameError,
+              Semantics(
+                label: 'Item Name text field',
+                textField: true,
+                child: TextFormField(
+                  controller: itemNameController,
+                  decoration: InputDecoration(
+                    labelText: 'Item Name',
+                    hintText: 'Enter the name of the lost or found item',
+                    errorText: _itemNameError,
+                  ),
+                  onChanged: _validateItemName,
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) {
+                      return 'Item name is required';
+                    }
+                    if (_containsExplicitContent(v)) {
+                      return 'Inappropriate words detected.';
+                    }
+                    return null;
+                  },
                 ),
-                onChanged: _validateItemName,
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'Required';
-                  if (_containsExplicitContent(v)) {
-                    return 'Inappropriate words detected.';
-                  }
-                  return null;
-                },
               ),
 
               const SizedBox(height: 16),
 
-              TextFormField(
-                controller: descriptionController,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  labelText: 'Description',
-                  errorText: _descriptionError,
+              Semantics(
+                label: 'Description text field',
+                textField: true,
+                child: TextFormField(
+                  controller: descriptionController,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    labelText: 'Description',
+                    hintText: 'Describe the item in detail (color, size, brand, etc.)',
+                    errorText: _descriptionError,
+                  ),
+                  onChanged: _validateDescription,
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) {
+                      return 'Description is required';
+                    }
+                    if (_containsLink(v)) return 'Links are not allowed.';
+                    if (_containsExplicitContent(v)) {
+                      return 'Inappropriate words detected.';
+                    }
+                    return null;
+                  },
                 ),
-                onChanged: _validateDescription,
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'Required';
-                  if (_containsLink(v)) return 'Links are not allowed.';
-                  if (_containsExplicitContent(v)) {
-                    return 'Inappropriate words detected.';
-                  }
-                  return null;
-                },
               ),
 
               const SizedBox(height: 16),
 
-              ListTile(
-                leading: const Icon(Icons.location_on),
-                title: const Text('Pick Location'),
-                subtitle: Text(
-                  locationController.text.isEmpty
-                      ? 'Tap to choose on map'
-                      : locationController.text,
+              Semantics(
+                label: locationController.text.isEmpty
+                    ? 'Pick location on map. No location selected yet'
+                    : 'Pick location on map. Current: ${locationController.text}',
+                button: true,
+                child: ListTile(
+                  leading: const Icon(Icons.location_on),
+                  title: const Text('Pick Location'),
+                  subtitle: Text(
+                    locationController.text.isEmpty
+                        ? 'Tap to choose on map'
+                        : locationController.text,
+                  ),
+                  onTap: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const MapPickerScreen(),
+                      ),
+                    );
+
+                    if (result != null) {
+                      setState(() {
+                        pickedAddress = result['name'];
+                        latitude = result['lat'];
+                        longitude = result['lng'];
+                        selectedEmirate = result['emirate'];
+
+                        locationController.text = pickedAddress!;
+                        emirateController.text =
+                            selectedEmirate ?? 'Unknown Emirate';
+                      });
+                    }
+                  },
                 ),
-                onTap: () async {
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const MapPickerScreen(),
-                    ),
-                  );
-
-                  if (result != null) {
-                    setState(() {
-                      pickedAddress = result['name'];
-                      latitude = result['lat'];
-                      longitude = result['lng'];
-                      selectedEmirate = result['emirate'];
-
-                      locationController.text = pickedAddress!;
-                      emirateController.text =
-                          selectedEmirate ?? 'Unknown Emirate';
-                    });
-                  }
-                },
               ),
 
               const SizedBox(height: 12),
 
-              TextFormField(
-                controller: emirateController,
+              Semantics(
+                label: 'Detected Emirate, read only',
+                textField: true,
                 readOnly: true,
-                decoration: const InputDecoration(
-                  labelText: 'Detected Emirate',
-                  prefixIcon: Icon(Icons.map),
+                child: TextFormField(
+                  controller: emirateController,
+                  readOnly: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Detected Emirate',
+                    hintText: 'Auto-detected from map selection',
+                    prefixIcon: Icon(Icons.map),
+                  ),
                 ),
               ),
 
@@ -430,40 +463,49 @@ Widget build(BuildContext context) {
               if (status == 'Lost') ...[
                 const SizedBox(height: 16),
 
-                TextFormField(
-                  controller: rewardController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Reward (AED) - Optional',
-                    prefixIcon: Icon(Icons.monetization_on),
+                Semantics(
+                  label: 'Reward amount in AED, optional',
+                  textField: true,
+                  child: TextFormField(
+                    controller: rewardController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Reward (AED) - Optional',
+                      hintText: 'Enter reward amount in AED (e.g. 100)',
+                      prefixIcon: Icon(Icons.monetization_on),
+                    ),
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) return null;
+
+                      final parsed = int.tryParse(v.trim());
+                      if (parsed == null || parsed < 0) {
+                        return 'Please enter a valid positive number';
+                      }
+
+                      if (parsed > 50000) {
+                        return 'Reward cannot exceed AED 50,000';
+                      }
+
+                      return null;
+                    },
                   ),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) return null;
-
-                    final parsed = int.tryParse(v.trim());
-                    if (parsed == null || parsed < 0) {
-                      return 'Enter valid amount';
-                    }
-
-                    if (parsed > 50000) {
-                      return 'Reward too high';
-                    }
-
-                    return null;
-                  },
                 ),
               ],
 
               const SizedBox(height: 28),
 
-              SizedBox(
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: isLoading ? null : _confirmPost,
-                  child: isLoading
-                      ? const CircularProgressIndicator(
-                          color: Colors.white)
-                      : const Text('Post Item'),
+              Semantics(
+                label: isLoading ? 'Posting item, please wait' : 'Post item',
+                button: true,
+                child: SizedBox(
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: isLoading ? null : _confirmPost,
+                    child: isLoading
+                        ? const CircularProgressIndicator(
+                            color: Colors.white)
+                        : const Text('Post Item'),
+                  ),
                 ),
               ),
             ],

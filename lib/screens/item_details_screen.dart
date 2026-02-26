@@ -5,6 +5,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'chat system/chat_screen.dart';
 import 'chat system/chat_service.dart';
@@ -29,6 +31,42 @@ class ItemDetailsScreen extends StatefulWidget {
 
 class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
   final GlobalKey _similarityKey = GlobalKey();
+
+  // ── Accessibility: TTS ──────────────────────────────────────────────────────
+  final FlutterTts _flutterTts = FlutterTts();
+  bool _ttsEnabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initAccessibility();
+  }
+
+  Future<void> _initAccessibility() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _ttsEnabled = prefs.getBool('ttsEnabled') ?? false;
+    });
+    if (_ttsEnabled) {
+      await _flutterTts.setLanguage('en-US');
+      await _flutterTts.setSpeechRate(0.5);
+    }
+  }
+
+  Future<void> _readDescription(String text) async {
+    if (!_ttsEnabled) return;
+    await _flutterTts.stop();
+    await _flutterTts.speak(text);
+  }
+
+  @override
+  void dispose() {
+    _flutterTts.stop();
+    super.dispose();
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
 
   @override
   void didChangeDependencies() {
@@ -106,13 +144,17 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
             title: const Text('Item Details'),
             actions: [
               if (!isOwner)
-                IconButton(
-                  icon: const Icon(Icons.flag, color: Colors.red),
-                  tooltip: 'Report',
-                  onPressed: () => _showReportDialog(
-                    context,
-                    widget.itemId,
-                    ownerId,
+                Semantics(
+                  label: 'Report this item',
+                  button: true,
+                  child: IconButton(
+                    icon: const Icon(Icons.flag, color: Colors.red),
+                    tooltip: 'Report',
+                    onPressed: () => _showReportDialog(
+                      context,
+                      widget.itemId,
+                      ownerId,
+                    ),
                   ),
                 ),
             ],
@@ -121,13 +163,17 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
             padding: const EdgeInsets.all(24),
             children: [
               if (imageUrl != null && imageUrl.isNotEmpty)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Image.network(
-                    imageUrl,
-                    height: 260,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
+                Semantics(
+                  label: 'Image of $name',
+                  image: true,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Image.network(
+                      imageUrl,
+                      height: 260,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
 
@@ -170,9 +216,8 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
                     'Reward: AED $reward',
-                    style: const TextStyle(
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: Colors.green,
-                      fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -183,8 +228,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
               // ITEM NAME
               Text(
                 name,
-                style: const TextStyle(
-                  fontSize: 26,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -214,10 +258,9 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
 
               const SizedBox(height: 24),
 
-              const Text(
+              Text(
                 'Description',
-                style: TextStyle(
-                  fontSize: 20,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -226,60 +269,77 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
 
               Text(description),
 
+              if (_ttsEnabled) ...[
+                const SizedBox(height: 8),
+                Semantics(
+                  button: true,
+                  label: 'Read item description aloud',
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.volume_up),
+                    label: const Text('Read Description'),
+                    onPressed: () => _readDescription(description),
+                  ),
+                ),
+              ],
+
               const SizedBox(height: 32),
 
               // CHAT BUTTON
               if (canChat)
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.chat_bubble_outline),
-                    label: const Text('Chat with owner'),
-                    onPressed: () async {
-                      // Block investigated users from chatting
-                      final allowed = await ReportService.canChat(currentUser.uid);
-                      if (!allowed) {
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Your account has been flagged. You cannot chat.',
+                Semantics(
+                  label: 'Chat with the owner of this item',
+                  button: true,
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.chat_bubble_outline),
+                      label: const Text('Chat with owner'),
+                      onPressed: () async {
+                        // Block investigated users from chatting
+                        final allowed = await ReportService.canChat(currentUser.uid);
+                        if (!allowed) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Your account has been flagged. You cannot chat.',
+                              ),
+                              backgroundColor: Colors.deepOrange,
                             ),
-                            backgroundColor: Colors.deepOrange,
+                          );
+                          return;
+                        }
+
+                        final caseId = buildCaseId(
+                          widget.itemId,
+                          currentUser.uid,
+                          ownerId,
+                        );
+
+                        await createCaseAndChat(
+                          caseId: caseId,
+                          lostUserId:
+                              status == 'Lost' ? ownerId : currentUser.uid,
+                          foundUserId:
+                              status == 'Lost' ? currentUser.uid : ownerId,
+                          itemId: widget.itemId,
+                          itemName: name,
+                        );
+
+                        if (!context.mounted) return;
+
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChatScreen(
+                              caseId: caseId,
+                              otherUserId: ownerId,
+                            ),
                           ),
                         );
-                        return;
-                      }
-
-                      final caseId = buildCaseId(
-                        widget.itemId,
-                        currentUser.uid,
-                        ownerId,
-                      );
-
-                      await createCaseAndChat(
-                        caseId: caseId,
-                        lostUserId:
-                            status == 'Lost' ? ownerId : currentUser.uid,
-                        foundUserId:
-                            status == 'Lost' ? currentUser.uid : ownerId,
-                        itemId: widget.itemId,
-                        itemName: name,
-                      );
-
-                      if (!context.mounted) return;
-
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ChatScreen(
-                            caseId: caseId,
-                            otherUserId: ownerId,
-                          ),
-                        ),
-                      );
-                    },
+                      },
+                    ),
                   ),
                 ),
 
@@ -293,31 +353,64 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                     child: Column(
                       children: [
                         if (!isClaimed)
-                          SizedBox(
-                            width: double.infinity,
-                            height: 48,
-                            child: ElevatedButton.icon(
-                              icon:
-                                  const Icon(Icons.check_circle_outline),
-                              label:
-                                  const Text('Mark as Claimed'),
-                              onPressed: () async {
-                                await FirebaseFirestore.instance
-                                    .collection('items')
-                                    .doc(widget.itemId)
-                                    .update({
-                                  'isClaimed': true,
-                                  'claimedAt': Timestamp.now(),
-                                });
+                          Semantics(
+                            label: 'Mark this item as claimed',
+                            button: true,
+                            child: SizedBox(
+                              width: double.infinity,
+                              height: 48,
+                              child: ElevatedButton.icon(
+                                icon: const Icon(
+                                    Icons.check_circle_outline),
+                                label: const Text('Mark as Claimed'),
+                                onPressed: () async {
+                                  final confirm =
+                                      await showDialog<bool>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: const Text(
+                                          'Mark as Claimed'),
+                                      content: const Text(
+                                        'Are you sure you want to mark this item as claimed? This action cannot be undone.',
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(
+                                                  ctx, false),
+                                          child:
+                                              const Text('Cancel'),
+                                        ),
+                                        ElevatedButton(
+                                          onPressed: () =>
+                                              Navigator.pop(
+                                                  ctx, true),
+                                          child:
+                                              const Text('Confirm'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                  if (confirm == true) {
+                                    await FirebaseFirestore.instance
+                                        .collection('items')
+                                        .doc(widget.itemId)
+                                        .update({
+                                      'isClaimed': true,
+                                      'claimedAt': Timestamp.now(),
+                                    });
 
-                                ScaffoldMessenger.of(context)
-                                    .showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                        'Item marked as claimed'),
-                                  ),
-                                );
-                              },
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            'Item marked as claimed'),
+                                      ),
+                                    );
+                                  }
+                                },
+                              ),
                             ),
                           ),
 
@@ -541,6 +634,7 @@ class _ReportFormState extends State<_ReportForm> {
               controller: _descriptionController,
               maxLines: 4,
               decoration: const InputDecoration(
+                labelText: 'Report Description',
                 hintText: 'Please describe the issue (min 10 characters)',
                 border: OutlineInputBorder(),
               ),
@@ -652,10 +746,9 @@ class SimilarItemsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Similar Items',
-          style: TextStyle(
-            fontSize: 22,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.bold,
           ),
         ),
