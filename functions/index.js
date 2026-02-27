@@ -12,6 +12,7 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const { calculateSimilarity } = require("./similarity");
+const { v4: uuidv4 } = require("uuid");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -35,6 +36,9 @@ exports.onAuthUserCreated = functions.auth.user().onCreate(async (user) => {
     lastPostAt: admin.firestore.Timestamp.fromMillis(0),
     hasAcceptedTerms: false,
     termsAcceptedAt: null,
+    unlockCount: 0,
+    unlockWindowStart: null,
+    unlockAttempts: 0,
   });
 });
 
@@ -242,6 +246,238 @@ exports.onUserStatusInvestigated = functions.firestore
       );
     }
   });
+
+/* =====================================================
+   🔓 VALIDATE AND UNLOCK CHAT (CALLABLE)
+   ===================================================== */
+
+/**
+ * Helper: log a failed unlock attempt to unlock_attempts collection.
+ */
+async function logFailedAttempt(userId, threadId, reason) {
+  try {
+    await db.collection("unlock_attempts").add({
+      userId,
+      threadId,
+      certificateCode: "",
+      attemptedAt: admin.firestore.FieldValue.serverTimestamp(),
+      success: false,
+      failureReason: reason,
+    });
+  } catch (err) {
+    console.error("logFailedAttempt: failed to write", err);
+  }
+}
+
+exports.validateAndUnlockChat = functions.https.onCall(async (data, context) => {
+  // ── 1. Auth check ──
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "You must be signed in to unlock a chat."
+    );
+  }
+
+  const uid = context.auth.uid;
+  const { caseId, lostReportId } = data;
+
+  if (!caseId || !lostReportId) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "caseId and lostReportId are required."
+    );
+  }
+
+  // ── 2. Read user document ──
+  const userRef = db.collection("users").doc(uid);
+  const userSnap = await userRef.get();
+
+  if (!userSnap.exists) {
+    throw new functions.https.HttpsError("not-found", "User not found.");
+  }
+
+  const userData = userSnap.data();
+  const unlockCount = userData.unlockCount ?? 0;
+
+  // ── 3. Payment check ──
+  if (unlockCount > 0) {
+    // In production this would verify a real payment token.
+    // For now we trust the client-side mock payment and proceed.
+    // If the client signals payment_required, throw the error.
+    if (data.paymentRequired === true && !data.paymentConfirmed) {
+      await logFailedAttempt(uid, caseId, "payment_required");
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "payment_required"
+      );
+    }
+  }
+
+  // ── 4. Rate limit check (max 5 attempts per 60 seconds) ──
+  const now = admin.firestore.Timestamp.now();
+  const windowStart = userData.unlockWindowStart;
+  let unlockAttempts = userData.unlockAttempts ?? 0;
+
+  const RATE_WINDOW_MS = 60 * 1000; // 60 seconds
+  const MAX_ATTEMPTS = 5;
+
+  if (windowStart && (now.toMillis() - windowStart.toMillis()) < RATE_WINDOW_MS) {
+    if (unlockAttempts >= MAX_ATTEMPTS) {
+      await logFailedAttempt(uid, caseId, "rate_limit_exceeded");
+      throw new functions.https.HttpsError(
+        "resource-exhausted",
+        "rate_limit_exceeded"
+      );
+    }
+    // Increment attempts within the window
+    await userRef.update({ unlockAttempts: admin.firestore.FieldValue.increment(1) });
+  } else {
+    // Reset window
+    await userRef.update({
+      unlockWindowStart: now,
+      unlockAttempts: 1,
+    });
+    unlockAttempts = 1;
+  }
+
+  // ── 5. Validate participant ──
+  const chatRoomSnap = await db.collection("chat_rooms").doc(caseId).get();
+  if (!chatRoomSnap.exists) {
+    await logFailedAttempt(uid, caseId, "chat_room_not_found");
+    throw new functions.https.HttpsError("not-found", "Chat room not found.");
+  }
+
+  const chatRoomData = chatRoomSnap.data();
+  const participants = chatRoomData.users ?? [];
+
+  if (!participants.includes(uid)) {
+    await logFailedAttempt(uid, caseId, "not_a_participant");
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "You are not a participant in this chat."
+    );
+  }
+
+  // ── 6. Early return if already unlocked ──
+  const caseSnap = await db.collection("cases").doc(caseId).get();
+  if (caseSnap.exists && caseSnap.data().isLocked === false) {
+    return { success: true, alreadyUnlocked: true };
+  }
+
+  // ── 7. Get item category ──
+  const itemId = chatRoomData.itemId;
+  if (!itemId) {
+    await logFailedAttempt(uid, caseId, "item_id_missing");
+    throw new functions.https.HttpsError(
+      "internal",
+      "Item ID not found in chat room."
+    );
+  }
+
+  const itemSnap = await db.collection("items").doc(itemId).get();
+  if (!itemSnap.exists) {
+    await logFailedAttempt(uid, caseId, "item_not_found");
+    throw new functions.https.HttpsError("not-found", "Item not found.");
+  }
+
+  // Use explicit 'category' if present; fall back to 'itemName'
+  const itemData = itemSnap.data();
+  const itemCategory = (itemData.category && itemData.category.trim())
+    ? itemData.category.trim()
+    : (itemData.itemName ?? "").trim();
+
+  // ── 8. Verify lost report ownership ──
+  // Lost reports are stored in the 'items' collection (status == 'Lost').
+  const reportSnap = await db.collection("items").doc(lostReportId).get();
+  if (!reportSnap.exists) {
+    await logFailedAttempt(uid, caseId, "report_not_found");
+    throw new functions.https.HttpsError("not-found", "Lost report not found.");
+  }
+
+  const reportData = reportSnap.data();
+  if (reportData.userId !== uid) {
+    await logFailedAttempt(uid, caseId, "report_not_owned");
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "This lost report does not belong to you."
+    );
+  }
+
+  // ── 9. Category match check ──
+  // Use explicit 'category' field if present; fall back to 'itemName'
+  // (items collection does not have a separate category field by default)
+  const reportCategory = (reportData.category && reportData.category.trim())
+    ? reportData.category.trim()
+    : (reportData.itemName ?? "").trim();
+
+  const normalizedItemCategory = itemCategory.toLowerCase().trim();
+  const normalizedReportCategory = reportCategory.toLowerCase().trim();
+
+  // Only enforce category match when both sides have a non-empty value
+  if (
+    normalizedItemCategory &&
+    normalizedReportCategory &&
+    normalizedItemCategory !== normalizedReportCategory
+  ) {
+    await logFailedAttempt(uid, caseId, "category_mismatch");
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "category_mismatch"
+    );
+  }
+
+  // ── 10. Generate certificate code (CERT-XXXX-XXXX) ──
+  const rawId = uuidv4().replace(/-/g, "").toUpperCase();
+  const certificateCode = `CERT-${rawId.slice(0, 4)}-${rawId.slice(4, 8)}`;
+
+  // ── 11. Create certificate document (30-day expiry) ──
+  const issuedAt = now;
+  const expiresAt = admin.firestore.Timestamp.fromMillis(
+    now.toMillis() + 30 * 24 * 60 * 60 * 1000
+  );
+
+  const certRef = db.collection("certificates").doc();
+  await certRef.set({
+    certificateCode,
+    userId: uid,
+    lostReportId,
+    category: normalizedReportCategory || normalizedItemCategory,
+    issuedAt,
+    expiresAt,
+    boundThreadId: caseId,
+    status: "active",
+    pdfPath: null,
+  });
+
+  // ── 12. Update case: unlock it ──
+  await db.collection("cases").doc(caseId).update({
+    isLocked: false,
+    unlockedBy: uid,
+    unlockedAt: now,
+    unlockedWithCertificate: certificateCode,
+  });
+
+  // ── 13. Increment unlockCount on user ──
+  await userRef.update({
+    unlockCount: admin.firestore.FieldValue.increment(1),
+  });
+
+  // ── 14. Log successful unlock attempt ──
+  await db.collection("unlock_attempts").add({
+    userId: uid,
+    threadId: caseId,
+    certificateCode,
+    attemptedAt: now,
+    success: true,
+    failureReason: null,
+  });
+
+  return {
+    success: true,
+    certificateCode,
+    alreadyUnlocked: false,
+  };
+});
 
 /* =====================================================
    🔔 NOTIFY USERS WHEN MATCH IS CREATED

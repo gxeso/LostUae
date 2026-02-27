@@ -46,6 +46,9 @@ dependencies:
   profanity_filter: ^2.0.0
   flutter_tts: ^4.2.0
   shared_preferences: ^2.3.0
+  cloud_functions: ^6.0.6
+  
+  
   
   
 

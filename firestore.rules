@@ -75,12 +75,16 @@ service cloud.firestore {
     /* ================= CASES (For Chat) ================= */
 
     match /cases/{caseId} {
+      // resource == null guard: lets createCaseAndChat check existence
+      // before creating without PERMISSION_DENIED on a missing doc.
       allow read: if isSignedIn()
-        && (request.auth.uid == resource.data.lostUserId 
+        && (resource == null
+            || request.auth.uid == resource.data.lostUserId 
             || request.auth.uid == resource.data.foundUserId);
       allow create: if isSignedIn()
         && (request.auth.uid == request.resource.data.lostUserId 
             || request.auth.uid == request.resource.data.foundUserId);
+      // Participants may update the case (e.g. unlock: isLocked → false).
       allow update: if isSignedIn()
         && (request.auth.uid == resource.data.lostUserId 
             || request.auth.uid == resource.data.foundUserId);
@@ -122,13 +126,37 @@ service cloud.firestore {
         allow create: if isSignedIn()
           && request.auth.uid in
             get(/databases/$(database)/documents/chat_rooms/$(roomId)).data.users
-          && request.resource.data.senderId == request.auth.uid;
+          && request.resource.data.senderId == request.auth.uid
+          && get(/databases/$(database)/documents/cases/$(roomId)).data.isLocked == false;
         // Allow chat participants to delete messages (needed for deleteChat)
         allow delete: if isSignedIn()
           && request.auth.uid in
             get(/databases/$(database)/documents/chat_rooms/$(roomId)).data.users;
         allow update: if false;
       }
+    }
+
+    /* ================= CERTIFICATES ================= */
+
+    match /certificates/{certId} {
+      allow read: if isSignedIn()
+        && resource.data.userId == request.auth.uid;
+      // Clients may create their own certificates (client-side fallback unlock).
+      // Cloud Function also creates certificates server-side (admin SDK bypasses rules).
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    /* ================= UNLOCK ATTEMPTS ================= */
+
+    match /unlock_attempts/{attemptId} {
+      allow read: if isSignedIn()
+        && resource.data.userId == request.auth.uid;
+      // Clients may log their own unlock attempts (client-side fallback unlock).
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
     }
 
     /* ================= DEFAULT DENY ================= */

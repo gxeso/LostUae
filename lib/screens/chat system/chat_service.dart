@@ -32,6 +32,7 @@ Future<void> createCaseAndChat({
       'lostUserConfirmed': false,
       'foundUserConfirmed': false,
       'status': 'active',
+      'isLocked': true,
       'createdAt': Timestamp.now(),
     });
   }
