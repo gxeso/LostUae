@@ -134,7 +134,7 @@ exports.onItemCreatedUpdateUser = functions.firestore
           userId: item.userId,
           type: "post_limit",
           message:
-            "You’ve reached the posting limit. Please wait 10 minutes before posting again.",
+            "You've reached the posting limit. Please wait 10 minutes before posting again.",
           isRead: false,
           cooldownUntil: admin.firestore.Timestamp.fromMillis(
             now.toMillis() + 10 * 60 * 1000
@@ -156,17 +156,11 @@ exports.onItemCreatedUpdateUser = functions.firestore
 exports.cleanupClaimedItems = functions.pubsub
   .schedule("every 24 hours")
   .onRun(async () => {
-    // 48 hours — short enough to keep the feed clean,
-    // long enough for the owner to see the resolution.
     const CLAIMED_TTL_MS = 48 * 60 * 60 * 1000;
     const cutoffMillis = Date.now() - CLAIMED_TTL_MS;
-    const cutoff = admin.firestore.Timestamp.fromMillis(cutoffMillis);
 
     let snap;
     try {
-      // Fetch ALL claimed items in one read.
-      // We filter by timestamp in code so we can handle
-      // legacy docs that are missing the claimedAt field.
       snap = await db
         .collection("items")
         .where("isClaimed", "==", true)
@@ -181,13 +175,8 @@ exports.cleanupClaimedItems = functions.pubsub
 
     for (const doc of snap.docs) {
       const data = doc.data();
-
-      // Prefer claimedAt; fall back to createdAt for items
-      // claimed before this field was introduced.
       const referenceTs = data.claimedAt ?? data.createdAt;
-
-      if (!referenceTs) continue; // no timestamp at all — skip
-
+      if (!referenceTs) continue;
       if (referenceTs.toMillis() <= cutoffMillis) {
         batch.delete(doc.ref);
         deleteCount++;
@@ -215,7 +204,6 @@ exports.onUserStatusInvestigated = functions.firestore
     const before = change.before.data();
     const after = change.after.data();
 
-    // Only act on the specific transition → 'investigated'
     if (
       before.accountStatus === "investigated" ||
       after.accountStatus !== "investigated"
@@ -301,9 +289,6 @@ exports.validateAndUnlockChat = functions.https.onCall(async (data, context) => 
 
   // ── 3. Payment check ──
   if (unlockCount > 0) {
-    // In production this would verify a real payment token.
-    // For now we trust the client-side mock payment and proceed.
-    // If the client signals payment_required, throw the error.
     if (data.paymentRequired === true && !data.paymentConfirmed) {
       await logFailedAttempt(uid, caseId, "payment_required");
       throw new functions.https.HttpsError(
@@ -318,7 +303,7 @@ exports.validateAndUnlockChat = functions.https.onCall(async (data, context) => 
   const windowStart = userData.unlockWindowStart;
   let unlockAttempts = userData.unlockAttempts ?? 0;
 
-  const RATE_WINDOW_MS = 60 * 1000; // 60 seconds
+  const RATE_WINDOW_MS = 60 * 1000;
   const MAX_ATTEMPTS = 5;
 
   if (windowStart && (now.toMillis() - windowStart.toMillis()) < RATE_WINDOW_MS) {
@@ -329,10 +314,8 @@ exports.validateAndUnlockChat = functions.https.onCall(async (data, context) => 
         "rate_limit_exceeded"
       );
     }
-    // Increment attempts within the window
     await userRef.update({ unlockAttempts: admin.firestore.FieldValue.increment(1) });
   } else {
-    // Reset window
     await userRef.update({
       unlockWindowStart: now,
       unlockAttempts: 1,
@@ -364,7 +347,7 @@ exports.validateAndUnlockChat = functions.https.onCall(async (data, context) => 
     return { success: true, alreadyUnlocked: true };
   }
 
-  // ── 7. Get item category ──
+  // ── 7. Fetch item data ──
   const itemId = chatRoomData.itemId;
   if (!itemId) {
     await logFailedAttempt(uid, caseId, "item_id_missing");
@@ -380,14 +363,9 @@ exports.validateAndUnlockChat = functions.https.onCall(async (data, context) => 
     throw new functions.https.HttpsError("not-found", "Item not found.");
   }
 
-  // Use explicit 'category' if present; fall back to 'itemName'
   const itemData = itemSnap.data();
-  const itemCategory = (itemData.category && itemData.category.trim())
-    ? itemData.category.trim()
-    : (itemData.itemName ?? "").trim();
 
   // ── 8. Verify lost report ownership ──
-  // Lost reports are stored in the 'items' collection (status == 'Lost').
   const reportSnap = await db.collection("items").doc(lostReportId).get();
   if (!reportSnap.exists) {
     await logFailedAttempt(uid, caseId, "report_not_found");
@@ -403,34 +381,40 @@ exports.validateAndUnlockChat = functions.https.onCall(async (data, context) => 
     );
   }
 
-  // ── 9. Category match check ──
-  // Use explicit 'category' field if present; fall back to 'itemName'
-  // (items collection does not have a separate category field by default)
-  const reportCategory = (reportData.category && reportData.category.trim())
-    ? reportData.category.trim()
-    : (reportData.itemName ?? "").trim();
+  // ── 9. Type pairing check ──
+  // One item must be 'Lost' and the other must be 'Found'.
+  const itemStatus   = (itemData.status   ?? "").toLowerCase().trim();
+  const reportStatus = (reportData.status ?? "").toLowerCase().trim();
 
-  const normalizedItemCategory = itemCategory.toLowerCase().trim();
-  const normalizedReportCategory = reportCategory.toLowerCase().trim();
-
-  // Only enforce category match when both sides have a non-empty value
-  if (
-    normalizedItemCategory &&
-    normalizedReportCategory &&
-    normalizedItemCategory !== normalizedReportCategory
-  ) {
-    await logFailedAttempt(uid, caseId, "category_mismatch");
+  if (!itemStatus || !reportStatus || itemStatus === reportStatus) {
+    await logFailedAttempt(uid, caseId, "invalid_type_pairing");
     throw new functions.https.HttpsError(
       "failed-precondition",
-      "category_mismatch"
+      "invalid_type_pairing"
     );
   }
 
-  // ── 10. Generate certificate code (CERT-XXXX-XXXX) ──
+  // ── 10. Similarity check (≥ 30%) ──
+  // Combine itemName + description for both items and run the hybrid
+  // Jaccard model already used for the `matched` collection.
+  const textA = `${itemData.itemName   ?? ""} ${itemData.description   ?? ""}`.trim();
+  const textB = `${reportData.itemName ?? ""} ${reportData.description ?? ""}`.trim();
+
+  const similarityScore = calculateSimilarity(textA, textB);
+
+  if (similarityScore < 0.30) {
+    await logFailedAttempt(uid, caseId, "similarity_too_low");
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "similarity_too_low"
+    );
+  }
+
+  // ── 11. Generate certificate code (CERT-XXXX-XXXX) ──
   const rawId = uuidv4().replace(/-/g, "").toUpperCase();
   const certificateCode = `CERT-${rawId.slice(0, 4)}-${rawId.slice(4, 8)}`;
 
-  // ── 11. Create certificate document (30-day expiry) ──
+  // ── 12. Create certificate document (30-day expiry) ──
   const issuedAt = now;
   const expiresAt = admin.firestore.Timestamp.fromMillis(
     now.toMillis() + 30 * 24 * 60 * 60 * 1000
@@ -441,7 +425,6 @@ exports.validateAndUnlockChat = functions.https.onCall(async (data, context) => 
     certificateCode,
     userId: uid,
     lostReportId,
-    category: normalizedReportCategory || normalizedItemCategory,
     issuedAt,
     expiresAt,
     boundThreadId: caseId,
@@ -449,7 +432,7 @@ exports.validateAndUnlockChat = functions.https.onCall(async (data, context) => 
     pdfPath: null,
   });
 
-  // ── 12. Update case: unlock it ──
+  // ── 13. Update case: unlock it ──
   await db.collection("cases").doc(caseId).update({
     isLocked: false,
     unlockedBy: uid,
@@ -457,12 +440,12 @@ exports.validateAndUnlockChat = functions.https.onCall(async (data, context) => 
     unlockedWithCertificate: certificateCode,
   });
 
-  // ── 13. Increment unlockCount on user ──
+  // ── 14. Increment unlockCount on user ──
   await userRef.update({
     unlockCount: admin.firestore.FieldValue.increment(1),
   });
 
-  // ── 14. Log successful unlock attempt ──
+  // ── 15. Log successful unlock attempt ──
   await db.collection("unlock_attempts").add({
     userId: uid,
     threadId: caseId,

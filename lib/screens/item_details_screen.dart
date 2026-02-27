@@ -60,6 +60,91 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
     await _flutterTts.speak(text);
   }
 
+  // ── Similarity gate ─────────────────────────────────────────────────────────
+  /// Returns true if [userId] has at least one item in the `matched` collection
+  /// that pairs with [itemId] and has a score ≥ 0.30.
+  ///
+  /// The Cloud Function already only writes to `matched` when score ≥ 0.30,
+  /// so the score filter here is a safety net for any legacy / manual entries.
+  Future<bool> _checkUserSimilarity(String userId, String itemId) async {
+    final firestore = FirebaseFirestore.instance;
+
+    // 1. Collect all item IDs that belong to the current user.
+    final userItemsSnap = await firestore
+        .collection('items')
+        .where('userId', isEqualTo: userId)
+        .get();
+
+    if (userItemsSnap.docs.isEmpty) return false;
+
+    final userItemIds =
+        userItemsSnap.docs.map((d) => d.id).toSet();
+
+    // 2. Query matched where the viewed item is the SOURCE.
+    final sourceSnap = await firestore
+        .collection('matched')
+        .where('sourceId', isEqualTo: itemId)
+        .get();
+
+    for (final doc in sourceSnap.docs) {
+      final data = doc.data();
+      final targetId = data['targetId'] as String?;
+      final score = (data['score'] as num?)?.toDouble() ?? 0.0;
+      if (targetId != null &&
+          userItemIds.contains(targetId) &&
+          score >= 0.30) {
+        return true;
+      }
+    }
+
+    // 3. Query matched where the viewed item is the TARGET.
+    final targetSnap = await firestore
+        .collection('matched')
+        .where('targetId', isEqualTo: itemId)
+        .get();
+
+    for (final doc in targetSnap.docs) {
+      final data = doc.data();
+      final sourceId = data['sourceId'] as String?;
+      final score = (data['score'] as num?)?.toDouble() ?? 0.0;
+      if (sourceId != null &&
+          userItemIds.contains(sourceId) &&
+          score >= 0.30) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /// Shows a dialog explaining why the user cannot chat.
+  void _showSimilarityBlockedDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.block, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Cannot Start Chat'),
+          ],
+        ),
+        content: const Text(
+          'You can only chat with the owner of this item if one of your '
+          'own lost/found reports has at least 30% similarity with this item.\n\n'
+          'Post a relevant lost or found report first, and if it matches '
+          'this item you will be able to chat.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _flutterTts.stop();
@@ -296,7 +381,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                       icon: const Icon(Icons.chat_bubble_outline),
                       label: const Text('Chat with owner'),
                       onPressed: () async {
-                        // Block investigated users from chatting
+                        // ── 1. Block investigated users ──────────────────────
                         final allowed = await ReportService.canChat(currentUser.uid);
                         if (!allowed) {
                           if (!context.mounted) return;
@@ -311,6 +396,42 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                           return;
                         }
 
+                        // ── 2. Similarity gate (≥ 30% required) ─────────────
+                        // Show a loading indicator while we query Firestore.
+                        if (context.mounted) {
+                          showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (_) => const AlertDialog(
+                              content: Row(
+                                children: [
+                                  CircularProgressIndicator(),
+                                  SizedBox(width: 16),
+                                  Expanded(
+                                    child: Text('Checking similarity...'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
+                        final hasSimilarity = await _checkUserSimilarity(
+                          currentUser.uid,
+                          widget.itemId,
+                        );
+
+                        // Dismiss loading dialog
+                        if (context.mounted) {
+                          Navigator.of(context, rootNavigator: true).pop();
+                        }
+
+                        if (!hasSimilarity) {
+                          if (context.mounted) _showSimilarityBlockedDialog();
+                          return;
+                        }
+
+                        // ── 3. Create case + chat room ───────────────────────
                         final caseId = buildCaseId(
                           widget.itemId,
                           currentUser.uid,

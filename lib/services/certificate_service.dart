@@ -162,6 +162,30 @@ class CertificateService {
   //     is not yet deployed. Performs basic ownership
   //     validation directly in Firestore.
   // ─────────────────────────────────────────────
+
+  /// Simple unigram Jaccard similarity used by the client-side fallback.
+  /// Mirrors the threshold logic in the Cloud Function (similarity.js).
+  static double _jaccardSimilarity(String textA, String textB) {
+    Set<String> tokenize(String text) {
+      return text
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+          .split(RegExp(r'\s+'))
+          .where((w) => w.isNotEmpty)
+          .toSet();
+    }
+
+    final setA = tokenize(textA);
+    final setB = tokenize(textB);
+
+    if (setA.isEmpty && setB.isEmpty) return 1.0;
+    if (setA.isEmpty || setB.isEmpty) return 0.0;
+
+    final intersection = setA.intersection(setB).length;
+    final union = setA.union(setB).length;
+    return intersection / union;
+  }
+
   static Future<UnlockResult> _clientSideUnlock({
     required String caseId,
     required String lostReportId,
@@ -193,6 +217,44 @@ class CertificateService {
       if (!users.contains(uid)) {
         return UnlockResult.failure(
             'permission-denied', 'You are not a participant in this chat.');
+      }
+
+      // Fetch the chat room's item
+      final itemId = chatDoc.data()?['itemId'] as String?;
+      if (itemId == null || itemId.isEmpty) {
+        return UnlockResult.failure('internal', 'Item ID not found in chat room.');
+      }
+      final itemDoc = await _firestore.collection('items').doc(itemId).get();
+      if (!itemDoc.exists) {
+        return UnlockResult.failure('not-found', 'Item not found.');
+      }
+
+      final itemData   = itemDoc.data()!;
+      final reportData = reportDoc.data()!;
+
+      // ── Type pairing check ──────────────────────────────────────────────
+      final itemStatus   = (itemData['status']   as String? ?? '').toLowerCase().trim();
+      final reportStatus = (reportData['status'] as String? ?? '').toLowerCase().trim();
+
+      if (itemStatus.isEmpty || reportStatus.isEmpty || itemStatus == reportStatus) {
+        return UnlockResult.failure(
+          'invalid_type_pairing',
+          'One item must be a lost report and the other must be a found item.',
+        );
+      }
+
+      // ── Similarity check (≥ 30%) ────────────────────────────────────────
+      final textA =
+          '${itemData['itemName'] ?? ''} ${itemData['description'] ?? ''}'.trim();
+      final textB =
+          '${reportData['itemName'] ?? ''} ${reportData['description'] ?? ''}'.trim();
+
+      final score = _jaccardSimilarity(textA, textB);
+      if (score < 0.30) {
+        return UnlockResult.failure(
+          'similarity_too_low',
+          'Your lost report does not have enough similarity (minimum 30%) with this item.',
+        );
       }
 
       // Generate a certificate code

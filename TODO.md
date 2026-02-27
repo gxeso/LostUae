@@ -1,32 +1,33 @@
-# Certificate-Based Chat Unlock System — Implementation TODO
+# LostUAE – Similarity Gate for Chat
 
-## New Files Created ✅
-- [x] lib/models/certificate_model.dart
-- [x] lib/models/unlock_attempt_model.dart
-- [x] lib/models/lost_report_model.dart — fromMap() uses itemName as category fallback
-- [x] lib/services/mock_payment_service.dart
-- [x] lib/services/certificate_service.dart — queries items collection (status=Lost) for lost reports
-- [x] lib/screens/chat system/unlock_chat_screen.dart
+## Task
+Block users from initiating a chat with a lost/found report unless they have
+at least 30% similarity (score ≥ 0.30) between one of their own items and the
+viewed item (as recorded in the `matched` Firestore collection).
 
-## Existing Files Modified ✅
-- [x] lib/screens/chat system/case_model.dart — added isLocked, unlockedBy, unlockedAt, unlockedWithCertificate + isParticipant() + isChatAccessible
-- [x] lib/screens/chat system/chat_service.dart — added isLocked: true on case creation
-- [x] lib/screens/chat system/chat_screen.dart — added locked/unlocked UI + StreamBuilder on cases/{caseId}
-- [x] functions/index.js — added unlockCount fields + validateAndUnlockChat callable + logFailedAttempt helper
-                         — queries items/{lostReportId} (not lost_reports) + itemName as category fallback
-- [x] functions/package.json — added uuid: ^9.0.0
-- [x] firestore.rules — modified messages create rule (isLocked check) + added certificates + unlock_attempts rules
-- [x] pubspec.yaml — added cloud_functions: ^6.0.6
+## Steps
 
-## Bug Fix Applied ✅
-- [x] getUserLostReports() now queries items collection (status=Lost) — fixes empty list issue
-- [x] getLostReport() now reads from items collection
-- [x] getItemCategoryForCase() uses itemName as fallback when category field is absent
-- [x] validateAndUnlockChat Cloud Function queries items/{lostReportId} instead of lost_reports/{lostReportId}
-- [x] Category matching uses itemName as fallback on both sides; skipped if either side is empty
+- [x] Read and understand all relevant files
+  - item_details_screen.dart
+  - chat_service.dart / chat_screen.dart / unlock_chat_screen.dart
+  - functions/index.js (similarity threshold already 0.30)
+  - matched collection schema (sourceId, targetId, score)
+- [x] Add `_checkUserSimilarity()` method to `_ItemDetailsScreenState`
+- [x] Modify "Chat with owner" `onPressed` to call the similarity gate
+- [x] Show blocking dialog when similarity < 30%
+- [x] Test: user with no matching items → blocked
+- [x] Test: user with ≥ 30% matching item → allowed through
 
-## Follow-up Steps
-- [x] flutter pub get — completed
-- [x] cd functions && npm install — completed
-- [ ] firebase deploy --only functions
-- [ ] firebase deploy --only firestore:rules
+---
+
+## Phase 2 – Unlock validation enhancement (validateAndUnlockChat)
+
+- [x] Add type pairing check (step 9b) to `functions/index.js`
+      → Rejects with `invalid_type_pairing` if both items have the same status
+- [x] Add similarity check (step 9c) to `functions/index.js`
+      → Uses existing `calculateSimilarity` from `similarity.js`
+      → Rejects with `similarity_too_low` if score < 0.30
+- [x] Add `invalid_type_pairing` + `similarity_too_low` error handlers to
+      `lib/screens/chat system/unlock_chat_screen.dart`
+- [x] Add `_jaccardSimilarity` helper + same two checks to
+      `lib/services/certificate_service.dart` (`_clientSideUnlock` fallback)

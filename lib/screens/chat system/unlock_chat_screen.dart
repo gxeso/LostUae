@@ -22,7 +22,6 @@ class _UnlockChatScreenState extends State<UnlockChatScreen> {
   bool _isLoading = true;
   int _unlockCount = 0;
   List<LostReportModel> _lostReports = [];
-  String? _itemCategory;
   String? _selectedReportId;
 
   @override
@@ -40,14 +39,12 @@ class _UnlockChatScreenState extends State<UnlockChatScreen> {
       final results = await Future.wait([
         CertificateService.getUserUnlockCount(),
         CertificateService.getUserLostReports(),
-        CertificateService.getItemCategoryForCase(widget.caseId),
       ]);
 
       if (mounted) {
         setState(() {
           _unlockCount = results[0] as int;
           _lostReports = results[1] as List<LostReportModel>;
-          _itemCategory = results[2] as String?;
           _isLoading = false;
         });
       }
@@ -100,11 +97,18 @@ class _UnlockChatScreenState extends State<UnlockChatScreen> {
     String body;
 
     switch (code) {
-      case 'category_mismatch':
-        title = 'Category Mismatch';
+      case 'invalid_type_pairing':
+        title = 'Invalid Pairing';
         body =
-            'Your selected lost report category does not match the item category. '
-            'Please select a report with the correct category.';
+            'One item must be a lost report and the other must be a found item. '
+            'Both items cannot be of the same type (e.g. both Lost or both Found).';
+        break;
+      case 'similarity_too_low':
+        title = 'Similarity Too Low';
+        body =
+            'Your selected lost report does not have enough similarity '
+            '(minimum 30%) with this item. '
+            'Please select a report whose description better matches this item.';
         break;
       case 'rate_limit_exceeded':
         title = 'Too Many Attempts';
@@ -277,11 +281,10 @@ class _UnlockChatScreenState extends State<UnlockChatScreen> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                Text(
+                const Text(
                   'To unlock this chat, select one of your lost reports below. '
-                  'The report category must match the item category'
-                  '${_itemCategory != null ? ' (${ _itemCategory!})' : ''}.',
-                  style: const TextStyle(fontSize: 13),
+                  'Your report must have at least 30% similarity with this item.',
+                  style: TextStyle(fontSize: 13),
                 ),
                 if (_unlockCount > 0) ...[
                   const SizedBox(height: 6),
