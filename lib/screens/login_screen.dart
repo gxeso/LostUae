@@ -15,14 +15,20 @@ import 'complete_profile_screen.dart';
 import 'utils/validators.dart';
 import '../theme/app_colors.dart';
 
+// ONLY showing changed + important parts (keep rest same)
+
 class LoginScreen extends StatefulWidget {
   final VoidCallback toggleTheme;
   final bool isDarkMode;
+
+  // 🔥 ADD THIS
+  final bool autoDeleteAfterLogin;
 
   const LoginScreen({
     super.key,
     required this.toggleTheme,
     required this.isDarkMode,
+    this.autoDeleteAfterLogin = false, // 🔥 default
   });
 
   @override
@@ -43,51 +49,84 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   /* ================= EMAIL LOGIN ================= */
-  Future<void> _handleEmailLogin() async {
-    final email = emailController.text.trim();
-    final password = passwordController.text.trim();
+ Future<void> _handleEmailLogin() async {
+  final email = emailController.text.trim();
+  final password = passwordController.text.trim();
 
-    if (email.isEmpty || password.isEmpty) {
-      _showError('Please enter email and password');
-      return;
-    }
-
-    if (!Validators.emailRegExp.hasMatch(email)) {
-      _showError('Invalid email format');
-      return;
-    }
-
-    if (!Validators.passwordRegExp.hasMatch(password)) {
-      _showError('Password must contain letters & numbers');
-      return;
-    }
-
-    try {
-      setState(() => isLoading = true);
-
-      final cred = await FirebaseAuth.instance
-          .signInWithEmailAndPassword(email: email, password: password);
-
-      final user = cred.user;
-      if (user == null) {
-        _showError('Login failed');
-        return;
-      }
-
-      await _checkTermsAndNavigate(user);
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'user-not-found') {
-        _showError('No account found');
-      } else if (e.code == 'wrong-password') {
-        _showError('Incorrect password');
-      } else {
-        _showError('Login failed');
-      }
-    } finally {
-      setState(() => isLoading = false);
-    }
+  if (email.isEmpty || password.isEmpty) {
+    _showError('Please enter email and password');
+    return;
   }
 
+  try {
+    setState(() => isLoading = true);
+
+    final cred = await FirebaseAuth.instance
+        .signInWithEmailAndPassword(email: email, password: password);
+
+    final user = cred.user;
+    if (user == null) return;
+
+    // 🔥 AUTO DELETE AFTER LOGIN
+    if (widget.autoDeleteAfterLogin) {
+      try {
+        final uid = user.uid;
+
+        // 1. DELETE AUTH
+        await user.delete();
+
+        // 2. DELETE FIRESTORE DATA
+        final firestore = FirebaseFirestore.instance;
+
+        final items = await firestore
+            .collection('items')
+            .where('userId', isEqualTo: uid)
+            .get();
+
+        for (final doc in items.docs) {
+          await doc.reference.delete();
+        }
+
+        final notis = await firestore
+            .collection('notifications')
+            .where('userId', isEqualTo: uid)
+            .get();
+
+        for (final doc in notis.docs) {
+          await doc.reference.delete();
+        }
+
+        await firestore.collection('users').doc(uid).delete();
+
+        // 3. SIGN OUT
+        await FirebaseAuth.instance.signOut();
+
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.green,
+            content: Text('Account deleted successfully'),
+          ),
+        );
+
+        return;
+      } catch (e) {
+        print("AUTO DELETE ERROR: $e");
+        _showError('Delete failed after login');
+        return;
+      }
+    }
+
+    // NORMAL FLOW
+    await _checkTermsAndNavigate(user);
+
+  } catch (e) {
+    _showError('Login failed');
+  } finally {
+    setState(() => isLoading = false);
+  }
+}
   /* ================= GOOGLE LOGIN ================= */
 Future<void> _handleGoogleSignIn() async {
   try {

@@ -53,9 +53,8 @@ exports.onItemCreated = functions.firestore
 
     if (!newItem?.description || !newItem?.status) return;
 
-    // Only fetch items with the OPPOSITE status (Lost ↔ Found).
-    // This avoids a full collection scan and cuts read costs significantly.
-    const oppositeStatus = newItem.status === "Lost" ? "Found" : "Lost";
+    const oppositeStatus =
+      newItem.status === "Lost" ? "Found" : "Lost";
 
     let itemsSnapshot;
     try {
@@ -64,7 +63,7 @@ exports.onItemCreated = functions.firestore
         .where("status", "==", oppositeStatus)
         .get();
     } catch (err) {
-      console.error("onItemCreated: failed to fetch opposite items", err);
+      console.error("❌ Fetch error:", err);
       return;
     }
 
@@ -76,13 +75,20 @@ exports.onItemCreated = functions.firestore
       const other = doc.data();
       if (!other?.description) continue;
 
-      const score = calculateSimilarity(
-        newItem.description,
-        other.description
-      );
+      // 🔥 IMPORTANT FIX: COMBINE NAME + DESCRIPTION
+      const textA = `${newItem.itemName ?? ""} ${newItem.description ?? ""}`.trim();
+      const textB = `${other.itemName ?? ""} ${other.description ?? ""}`.trim();
 
-      // Threshold: 0.30 — calibrated for the hybrid stopword-aware model.
-      if (score < 0.30) continue;
+      const score = calculateSimilarity(textA, textB);
+
+      console.log("🆕 NEW:", textA);
+      console.log("🔍 AGAINST:", textB);
+      console.log("📊 SCORE:", score);
+
+      // 🔥 BETTER THRESHOLD
+      if (score < 0.4) continue;
+
+      console.log("✅ MATCH FOUND!");
 
       const sourceId = newItemId < doc.id ? newItemId : doc.id;
       const targetId = newItemId < doc.id ? doc.id : newItemId;
@@ -93,6 +99,8 @@ exports.onItemCreated = functions.firestore
           sourceId,
           targetId,
           score: Number(score.toFixed(3)),
+          textA,
+          textB,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true }
@@ -101,8 +109,9 @@ exports.onItemCreated = functions.firestore
 
     try {
       await batch.commit();
+      console.log("💾 Matches committed");
     } catch (err) {
-      console.error("onItemCreated: batch commit failed", err);
+      console.error("❌ Batch failed:", err);
     }
   });
 

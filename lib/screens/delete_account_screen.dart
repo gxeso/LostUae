@@ -1,7 +1,3 @@
-// © 2026 Project LostUAE
-// Joint work – All rights reserved
-// Unauthorized use prohibited
-
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -17,6 +13,8 @@ class DeleteAccountScreen extends StatefulWidget {
 
 class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
   bool _loading = false;
+
+  /* ================= CONFIRM ================= */
 
   Future<void> _confirmAndDelete() async {
     final confirmed = await showDialog<bool>(
@@ -48,6 +46,8 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
     await _deleteAccount();
   }
 
+  /* ================= MAIN DELETE ================= */
+
   Future<void> _deleteAccount() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -58,36 +58,16 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
       final uid = user.uid;
       final firestore = FirebaseFirestore.instance;
 
-      // 1️⃣ Delete user items
-      final items = await firestore
-          .collection('items')
-          .where('userId', isEqualTo: uid)
-          .get();
-
-      for (final doc in items.docs) {
-        await doc.reference.delete();
-      }
-
-      // 2️⃣ Delete notifications
-      final notis = await firestore
-          .collection('notifications')
-          .where('userId', isEqualTo: uid)
-          .get();
-
-      for (final doc in notis.docs) {
-        await doc.reference.delete();
-      }
-
-      // 3️⃣ Delete user profile
-      await firestore.collection('users').doc(uid).delete();
-
-      // 4️⃣ Delete Firebase Auth account
+      // 🔥 STEP 1: DELETE AUTH FIRST
       await user.delete();
 
-      // 5️⃣ Sign out
+      // 🔥 STEP 2: DELETE USER DATA
+      await _deleteUserData(uid, firestore);
+
+      // 🔥 STEP 3: SIGN OUT
       await FirebaseAuth.instance.signOut();
 
-      // 6️⃣ Navigate to Login
+      // 🔥 STEP 4: GO TO LOGIN
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
         context,
@@ -100,44 +80,78 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
         (_) => false,
       );
     } on FirebaseAuthException catch (e) {
-      String message = 'Account deletion failed';
+      if (e.code == 'requires-recent-login') {
+        await _handleReLogin();
+        return;
+      }
 
-    if (e.code == 'requires-recent-login') {
-  await FirebaseAuth.instance.signOut();
-
-  if (!mounted) return;
-
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      backgroundColor: Colors.orange,
-      content: Text(
-        'Please log in again to confirm account deletion.',
-        style: TextStyle(color: Colors.white),
-      ),
-    ),
-  );
-
-  Navigator.pushAndRemoveUntil(
-    context,
-    MaterialPageRoute(
-      builder: (_) => LoginScreen(
-        toggleTheme: () {},
-        isDarkMode: false,
-      ),
-    ),
-    (_) => false,
-  );
-  return;
-}
-
-
-      _showError(message);
-    } catch (_) {
-      _showError('Something went wrong. Please try again.');
+      _showError('Account deletion failed');
+    } catch (e) {
+      _showError('Something went wrong');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
+
+  /* ================= DELETE DATA ================= */
+
+  Future<void> _deleteUserData(
+      String uid, FirebaseFirestore firestore) async {
+    // Delete items
+    final items = await firestore
+        .collection('items')
+        .where('userId', isEqualTo: uid)
+        .get();
+
+    for (final doc in items.docs) {
+      await doc.reference.delete();
+    }
+
+    // Delete notifications
+    final notis = await firestore
+        .collection('notifications')
+        .where('userId', isEqualTo: uid)
+        .get();
+
+    for (final doc in notis.docs) {
+      await doc.reference.delete();
+    }
+
+    // Delete user profile
+    await firestore.collection('users').doc(uid).delete();
+  }
+
+  /* ================= HANDLE RELOGIN ================= */
+
+  Future<void> _handleReLogin() async {
+    await FirebaseAuth.instance.signOut();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        backgroundColor: Colors.orange,
+        content: Text(
+          'Please log in again to confirm deletion',
+          style: TextStyle(color: Colors.white),
+        ),
+      ),
+    );
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LoginScreen(
+          toggleTheme: () {},
+          isDarkMode: false,
+          autoDeleteAfterLogin: true, // 🔥 IMPORTANT FLAG
+        ),
+      ),
+      (_) => false,
+    );
+  }
+
+  /* ================= UI ================= */
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
