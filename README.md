@@ -1,9 +1,8 @@
 # lost_uae
 
+© 2026 LostUAE
 
-
-© 2026 [LostUAE]
-
+## 👥 Team Members
 Jointly developed and owned by:
 - Adam Shamekh (8452337)
 - Mohamad Daya (7738882)
@@ -14,23 +13,33 @@ Jointly developed and owned by:
 
 All rights reserved.
 
+---
 
-A new Flutter project.
+## 📱 About the Project
+LostUAE is a Flutter-based mobile application designed to help users report, search, and recover lost items efficiently using modern technologies including AI-powered matching and secure verification systems.
 
-## Getting Started
+---
+
+## 🎥 Marketing Demo Video
+Watch our system in action:
+
+👉 https://www.youtube.com/watch?v=bdoPHWEY4_M
+
+---
+
+## 🚀 Getting Started
 
 This project is a starting point for a Flutter application.
 
-A few resources to get you started if this is your first Flutter project:
+### Helpful Resources:
+- https://docs.flutter.dev/get-started/codelab
+- https://docs.flutter.dev/cookbook
+- https://docs.flutter.dev/
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+For full documentation, tutorials, and API references, visit the official Flutter documentation.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+---
 
+## 🔒 License & Usage
 
-Unauthorized use, reproduction, or distribution of this project
-or its source code is prohibited without written permission
-from all authors.
+Unauthorized use, reproduction, or distribution of this project or its source code is strictly prohibited without written permission from all authors.
