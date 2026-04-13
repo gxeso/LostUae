@@ -1,4 +1,4 @@
-package com.example.lost_uae
+package com.lostuae.app
 
 import android.content.Intent
 import android.os.Bundle

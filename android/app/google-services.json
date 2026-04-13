@@ -7,20 +7,12 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:4991329968:android:169801b1605174f6ccbd75",
+        "mobilesdk_app_id": "1:4991329968:android:632bb0b6e9ea3987ccbd75",
         "android_client_info": {
-          "package_name": "com.example.lost_uae"
+          "package_name": "com.lostuae.app"
         }
       },
       "oauth_client": [
-        {
-          "client_id": "4991329968-40ds5fql27f0iiopesqd2tgs01834skf.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.example.lost_uae",
-            "certificate_hash": "d333a6ce1cbd0cf0567ea7d3298faa50b6461b6c"
-          }
-        },
         {
           "client_id": "4991329968-1fg8bk2enu56dmtfl7o7gjj3kvmqh2p7.apps.googleusercontent.com",
           "client_type": 3
@@ -28,7 +20,7 @@
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyAUX_TOuKdTYGWY1r_KkqpvqMalO8l8K4c"
+          "current_key": "AIzaSyC71LVzrnC3HXQiUQo7H1i9sh6xCvz3VY4"
         }
       ],
       "services": {

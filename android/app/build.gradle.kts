@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.lost_uae"
+    namespace = "com.lostuae.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -21,7 +21,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.lost_uae"
+        applicationId = "com.lostuae.app"
 
         // ✅ CORRECT Kotlin DSL syntax
         minSdk = flutter.minSdkVersion
