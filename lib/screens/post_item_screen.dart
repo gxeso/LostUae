@@ -3,12 +3,14 @@
 // Unauthorized use prohibited
 
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:profanity_filter/profanity_filter.dart';
+import 'package:http/http.dart' as http;  
 
 import 'map_picker_screen.dart';
 
@@ -46,6 +48,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
 
   String status = 'Lost';
   bool isLoading = false;
+  bool isAnalyzing = false;  
 
   String verificationStatus = 'none';
   String accountStatus = '';
@@ -139,7 +142,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
     super.dispose();
   }
 
-  /* ---------------- IMAGE ---------------- */
+  /* ---------------- IMAGE & ANALYSIS ---------------- */
 
   Future<void> _pickImage() async {
     final picked = await _picker.pickImage(
@@ -151,6 +154,57 @@ class _PostItemScreenState extends State<PostItemScreen> {
       setState(() => selectedImage = File(picked.path));
     }
   }
+
+  // NEW: Send image to Cloud Run API and get analysis
+  Future<void> _analyzeImage() async {
+  if (selectedImage == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Please select an image first')),
+    );
+    return;
+  }
+
+  setState(() => isAnalyzing = true);
+
+  try {
+    final bytes = await selectedImage!.readAsBytes();
+
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('https://phone-analyzer-phx7dxysyq-uc.a.run.app/analyze'),
+    );
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: 'image.jpg',
+      ),
+    );
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final buffer = StringBuffer();
+      buffer.writeln(data['phone_color'] ?? 'Color: unknown');
+      buffer.writeln(data['case_type'] ?? 'Case: unknown');
+      buffer.writeln('Stickers present: ${data['stickers_present'] ?? '?'}');
+      buffer.writeln('Sticker details: ${data['sticker_details'] ?? 'none'}');
+      buffer.writeln('Sticker colors: ${data['sticker_colors'] ?? 'none'}');
+      buffer.writeln('Visible text: ${data['visible_text'] ?? 'none'}');
+      descriptionController.text = buffer.toString().trim();
+    } else {
+      throw Exception('Server error: ${response.statusCode}');
+    }
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Analysis failed: $e')),
+    );
+  } finally {
+    if (mounted) setState(() => isAnalyzing = false);
+  }
+}
 
   Future<String?> _uploadImage(String uid) async {
     if (selectedImage == null) return null;
@@ -215,101 +269,94 @@ class _PostItemScreenState extends State<PostItemScreen> {
 
   /* ---------------- SUBMIT ---------------- */
 
- Future<void> _submitItem() async {
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return;
+  Future<void> _submitItem() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
-  setState(() => isLoading = true);
+    setState(() => isLoading = true);
 
-  try {
-    // 🔥 ALWAYS fetch fresh status from Firestore
-    final snap = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
 
-    final currentVerification = snap.data()?['verificationStatus'];
-    final currentAccount = snap.data()?['accountStatus'] ?? '';
+      final currentVerification = snap.data()?['verificationStatus'];
+      final currentAccount = snap.data()?['accountStatus'] ?? '';
 
-    // Block investigated users
-    if (currentAccount == 'investigated') {
+      if (currentAccount == 'investigated') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Your account has been flagged. You cannot post items.'),
+            backgroundColor: Colors.deepOrange,
+          ),
+        );
+        setState(() => isLoading = false);
+        return;
+      }
+
+      if (currentVerification != 'verified') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You must verify before posting.')),
+        );
+        setState(() => isLoading = false);
+        return;
+      }
+
+      final imageUrl = await _uploadImage(user.uid);
+
+      await FirebaseFirestore.instance.collection('items').add({
+        'status': status,
+        'itemName': itemNameController.text.trim(),
+        'description': descriptionController.text.trim(),
+        'locationName': pickedAddress,
+        'latitude': latitude,
+        'longitude': longitude,
+        'contactPhone': phoneController.text.trim().isEmpty
+            ? null
+            : '+971${phoneController.text.trim()}',
+        'rewardAed': rewardController.text.trim().isEmpty
+            ? null
+            : int.parse(rewardController.text.trim()),
+        'emirate': selectedEmirate,
+        'userId': user.uid,
+        'imageUrl': imageUrl,
+        'createdAt': Timestamp.now(),
+        'isClaimed': false,
+      });
+
+      widget.onPostSuccess();
+    } catch (e) {
+      print("POST ERROR: $e");
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Your account has been flagged. You cannot post items.'),
-          backgroundColor: Colors.deepOrange,
-        ),
+        const SnackBar(content: Text('Failed to post item')),
       );
-      setState(() => isLoading = false);
-      return;
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
-
-    if (currentVerification != 'verified') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You must verify before posting.')),
-      );
-      setState(() => isLoading = false);
-      return;
-    }
-
-    final imageUrl = await _uploadImage(user.uid);
-
-    await FirebaseFirestore.instance.collection('items').add({
-      'status': status,
-      'itemName': itemNameController.text.trim(),
-      'description': descriptionController.text.trim(),
-      'locationName': pickedAddress,
-      'latitude': latitude,
-      'longitude': longitude,
-      'contactPhone': phoneController.text.trim().isEmpty
-          ? null
-          : '+971${phoneController.text.trim()}',
-      'rewardAed': rewardController.text.trim().isEmpty
-          ? null
-          : int.parse(rewardController.text.trim()),
-      'emirate': selectedEmirate,
-      'userId': user.uid,
-      'imageUrl': imageUrl,
-      'createdAt': Timestamp.now(),
-      'isClaimed': false,
-    });
-
-    widget.onPostSuccess();
-  } catch (e) {
-    print("POST ERROR: $e");
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Failed to post item')),
-    );
-  } finally {
-    if (mounted) setState(() => isLoading = false);
   }
-}
+
   /* ---------------- UI ---------------- */
 
-@override
-Widget build(BuildContext context) {
-  if (!verificationLoaded) {
-    return const Center(
-      child: CircularProgressIndicator(),
-    );
-  }
+  @override
+  Widget build(BuildContext context) {
+    if (!verificationLoaded) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
 
-  return SafeArea(
-    child: Material(
-      color: Colors.transparent,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-
-              Semantics(
-                label: selectedImage == null
-                    ? 'Upload item photo. Tap to select from gallery'
-                    : 'Selected item photo. Tap to change',
-                button: true,
-                image: selectedImage != null,
-                child: GestureDetector(
+    return SafeArea(
+      child: Material(
+        color: Colors.transparent,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Form(
+            key: _formKey,
+            child: ListView(
+              children: [
+                // Image picker area
+                GestureDetector(
                   onTap: _pickImage,
                   child: Container(
                     height: 190,
@@ -324,76 +371,73 @@ Widget build(BuildContext context) {
                           : null,
                     ),
                     child: selectedImage == null
-                        ? const Center(
-                            child: Icon(Icons.add_a_photo, size: 42))
+                        ? const Center(child: Icon(Icons.add_a_photo, size: 42))
                         : null,
                   ),
                 ),
-              ),
 
-              const SizedBox(height: 20),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: isAnalyzing ? null : _analyzeImage,
+                  icon: isAnalyzing
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.auto_awesome),
+                  label: Text(isAnalyzing ? 'Analyzing...' : 'Analyze Image'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.purple,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
 
-              DropdownButtonFormField<String>(
-                value: status,
-                decoration: const InputDecoration(labelText: 'Status'),
-                items: const [
-                  DropdownMenuItem(value: 'Lost', child: Text('Lost')),
-                  DropdownMenuItem(value: 'Found', child: Text('Found')),
-                ],
-                onChanged: (v) {
-                  setState(() {
-                    status = v!;
-                    // Reward is only for Lost items — clear it when switching to Found
-                    if (status == 'Found') {
-                      rewardController.clear();
-                    }
-                  });
-                },
-              ),
+                const SizedBox(height: 20),
 
-              const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: status,
+                  decoration: const InputDecoration(labelText: 'Status'),
+                  items: const [
+                    DropdownMenuItem(value: 'Lost', child: Text('Lost')),
+                    DropdownMenuItem(value: 'Found', child: Text('Found')),
+                  ],
+                  onChanged: (v) {
+                    setState(() {
+                      status = v!;
+                      if (status == 'Found') {
+                        rewardController.clear();
+                      }
+                    });
+                  },
+                ),
 
-              Semantics(
-                label: 'Item Name text field',
-                textField: true,
-                child: TextFormField(
+                const SizedBox(height: 16),
+
+                TextFormField(
                   controller: itemNameController,
                   decoration: InputDecoration(
                     labelText: 'Item Name',
-                    hintText: 'Enter the name of the lost or found item',
                     errorText: _itemNameError,
                   ),
                   onChanged: _validateItemName,
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) {
-                      return 'Item name is required';
-                    }
+                    if (v == null || v.trim().isEmpty) return 'Required';
                     if (_containsExplicitContent(v)) {
                       return 'Inappropriate words detected.';
                     }
                     return null;
                   },
                 ),
-              ),
 
-              const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-              Semantics(
-                label: 'Description text field',
-                textField: true,
-                child: TextFormField(
+                TextFormField(
                   controller: descriptionController,
-                  maxLines: 3,
+                  maxLines: 6, // increased to show more analysis text
                   decoration: InputDecoration(
-                    labelText: 'Description',
-                    hintText: 'Describe the item in detail (color, size, brand, etc.)',
+                    labelText: 'Description (AI auto‑fill available)',
                     errorText: _descriptionError,
                   ),
                   onChanged: _validateDescription,
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) {
-                      return 'Description is required';
-                    }
+                    if (v == null || v.trim().isEmpty) return 'Required';
                     if (_containsLink(v)) return 'Links are not allowed.';
                     if (_containsExplicitContent(v)) {
                       return 'Inappropriate words detected.';
@@ -401,16 +445,10 @@ Widget build(BuildContext context) {
                     return null;
                   },
                 ),
-              ),
 
-              const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-              Semantics(
-                label: locationController.text.isEmpty
-                    ? 'Pick location on map. No location selected yet'
-                    : 'Pick location on map. Current: ${locationController.text}',
-                button: true,
-                child: ListTile(
+                ListTile(
                   leading: const Icon(Icons.location_on),
                   title: const Text('Pick Location'),
                   subtitle: Text(
@@ -440,79 +478,57 @@ Widget build(BuildContext context) {
                     }
                   },
                 ),
-              ),
 
-              const SizedBox(height: 12),
+                const SizedBox(height: 12),
 
-              Semantics(
-                label: 'Detected Emirate, read only',
-                textField: true,
-                readOnly: true,
-                child: TextFormField(
+                TextFormField(
                   controller: emirateController,
                   readOnly: true,
                   decoration: const InputDecoration(
                     labelText: 'Detected Emirate',
-                    hintText: 'Auto-detected from map selection',
                     prefixIcon: Icon(Icons.map),
                   ),
                 ),
-              ),
 
-              // Reward only applies to Lost items
-              if (status == 'Lost') ...[
-                const SizedBox(height: 16),
-
-                Semantics(
-                  label: 'Reward amount in AED, optional',
-                  textField: true,
-                  child: TextFormField(
+                if (status == 'Lost') ...[
+                  const SizedBox(height: 16),
+                  TextFormField(
                     controller: rewardController,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
                       labelText: 'Reward (AED) - Optional',
-                      hintText: 'Enter reward amount in AED (e.g. 100)',
                       prefixIcon: Icon(Icons.monetization_on),
                     ),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) return null;
-
                       final parsed = int.tryParse(v.trim());
                       if (parsed == null || parsed < 0) {
-                        return 'Please enter a valid positive number';
+                        return 'Enter valid amount';
                       }
-
                       if (parsed > 50000) {
-                        return 'Reward cannot exceed AED 50,000';
+                        return 'Reward too high';
                       }
-
                       return null;
                     },
                   ),
-                ),
-              ],
+                ],
 
-              const SizedBox(height: 28),
+                const SizedBox(height: 28),
 
-              Semantics(
-                label: isLoading ? 'Posting item, please wait' : 'Post item',
-                button: true,
-                child: SizedBox(
+                SizedBox(
                   height: 48,
                   child: ElevatedButton(
                     onPressed: isLoading ? null : _confirmPost,
                     child: isLoading
-                        ? const CircularProgressIndicator(
-                            color: Colors.white)
+                        ? const CircularProgressIndicator(color: Colors.white)
                         : const Text('Post Item'),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }

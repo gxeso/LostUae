@@ -21,6 +21,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final user = FirebaseAuth.instance.currentUser;
   String _otherUsername = '';
+  bool _holderPopupShown = false;
 
   @override
   void initState() {
@@ -62,6 +63,48 @@ class _ChatScreenState extends State<ChatScreen> {
         _otherUsername = userData['nickname'] ?? 'User';
       });
     }
+  }
+
+  // ─────────────────────────────────────────────
+  // Holder verification popup (one-time per case)
+  // ─────────────────────────────────────────────
+  void _maybeShowHolderPopup(Map<String, dynamic>? caseData) {
+    if (_holderPopupShown) return;
+    final foundUserId = caseData?['foundUserId'] as String?;
+    final dismissed = caseData?['holderPopupDismissed'] as bool? ?? false;
+    if (foundUserId == null || foundUserId != user!.uid || dismissed) return;
+
+    _holderPopupShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Verify ownership carefully'),
+          content: const Text(
+            'Before handing over the item, ask the claimant for details that '
+            'only the real owner would know. For example, request an older photo, '
+            'a receipt, a unique mark, the number of cards inside a wallet, a '
+            'missing accessory, or any specific detail not visible in the post or '
+            'chat.\n\n'
+            'Do not rely only on general descriptions. Proceed only when you are '
+            'reasonably confident the item belongs to them.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Got it'),
+            ),
+          ],
+        ),
+      ).then((_) {
+        FirebaseFirestore.instance
+            .collection('cases')
+            .doc(widget.caseId)
+            .update({'holderPopupDismissed': true});
+      });
+    });
   }
 
   // ─────────────────────────────────────────────
@@ -307,6 +350,8 @@ class _ChatScreenState extends State<ChatScreen> {
         if (isLocked) {
           return _buildLockedChatUI();
         }
+
+        _maybeShowHolderPopup(caseData);
 
         // Inner StreamBuilder: listens to chat_rooms/{caseId} for pin status
         return StreamBuilder<DocumentSnapshot>(
