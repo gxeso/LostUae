@@ -23,7 +23,7 @@ LostUAE is a Flutter-based mobile application designed to help users report, sea
 ## 🎥 Marketing Demo Video
 Watch our system in action:
 
-👉 https://www.youtube.com/watch?v=bdoPHWEY4_M
+👉 https://youtu.be/yCcgCj5hs00
 
 ---
 
