@@ -43,3 +43,61 @@ For full documentation, tutorials, and API references, visit the official Flutte
 ## 🔒 License & Usage
 
 Unauthorized use, reproduction, or distribution of this project or its source code is strictly prohibited without written permission from all authors.
+
+
+
+
+How to launch our app:
+
+
+Follow the steps below to set up and launch the LostUAE Flutter application on your local machine.
+
+1. Prerequisites
+
+Make sure you have the following installed:
+
+Flutter SDK (latest stable version)
+Android Studio or Visual Studio Code
+Android Emulator or a physical Android device
+Git
+2. Clone the Repository
+git clone https://github.com/YOUR-USERNAME/lost_uae.git
+cd lost_uae
+3. Install Dependencies
+
+Run the following command to install all required packages:
+
+flutter pub get
+4. Firebase Setup (Important)
+
+This app uses Firebase services. To run it properly:
+
+Create a project in Firebase
+Add an Android app with your package name
+Download the google-services.json file
+Place it inside:
+android/app/
+5. Run the App
+
+Start an emulator or connect your Android device, then run:
+
+flutter run
+6. Troubleshooting
+If no device is detected:
+flutter devices
+If dependencies fail:
+flutter clean
+flutter pub get
+Ensure USB debugging is enabled (for physical devices)
+7. Build APK (Optional)
+
+To generate an installable APK:
+
+flutter build apk
+
+The APK will be located in:
+
+build/app/outputs/flutter-apk/
+📌 Notes
+Make sure your emulator has enough storage (common issue during installation).
+Internet connection is required for Firebase features.
